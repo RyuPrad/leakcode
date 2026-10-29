@@ -1,0 +1,887 @@
+@@@ section
+{"id": "realloc", "title": "Growing Memory: realloc", "summary": "Buffers that grow as data arrives: amortized doubling, realloc's moving blocks, and fixed-size ring buffers."}
+
+@@@ problem dynamic-array
+@@ meta
+{
+  "title": "Dynamic Array (Vector)",
+  "difficulty": "Medium",
+  "topics": ["realloc", "Design", "Amortized growth"],
+  "kind": "design",
+  "params": [{"name": "operations", "type": "string[]"}, {"name": "arguments", "type": "any[][]"}],
+  "examples": [
+    {"input": ["[\"push\",\"push\",\"push\",\"get\",\"size\"]", "[[1],[2],[3],[1],[]]"], "output": "[null,null,null,2,3]", "explanation": "The harness calls vecCreate(), then each operation in order (null = no return value), then vecFree()."},
+    {"input": ["[\"push\",\"pop\",\"size\",\"push\",\"push\",\"set\",\"get\",\"get\"]", "[[5],[],[],[6],[7],[0,60],[0],[1]]"], "output": "[null,5,0,null,null,null,60,7]"}
+  ],
+  "hints": [
+    "Keep three fields: a pointer to the elements, the number of elements in use, and the capacity.",
+    "When size == capacity, grow the capacity by a factor (doubling is classic) with realloc.",
+    "Assign realloc's result to a temporary first: if it returns NULL, your old block is still valid.",
+    "vecFree must free the element array and the struct itself."
+  ],
+  "constraints": ["Up to 20 000 pushes per test", "get/set/pop are only called with valid indices / on a non-empty vector", "pushRange [lo, hi] is a harness shortcut that pushes lo, lo+1, ..., hi-1"],
+  "memory": "Growing must be **amortized O(1)**: the number of reallocations must grow only logarithmically with the number of pushes. `vecFree` must release everything."
+}
+@@ description
+Implement a growable array of `int`s, the C version of C++'s `std::vector` or Python's `list`.
+
+```c
+typedef struct IntVec IntVec;      // you define struct IntVec
+
+IntVec *vecCreate(void);
+void vecPush(IntVec *v, int value);          // append at the end
+int  vecGet(const IntVec *v, int index);
+void vecSet(IntVec *v, int index, int value);
+int  vecPop(IntVec *v);                      // remove and return the last element
+int  vecSize(const IntVec *v);
+void vecFree(IntVec *v);
+```
+
+The test harness only sees an **opaque** `IntVec *`: it never looks inside your struct. This is how C libraries hide their internals (`FILE *` works the same way).
+
+**The catch:** calling `realloc` on every push copies the whole array each time, making n pushes cost O(n²). The harness counts your allocations: grow the capacity *geometrically* so the number of reallocations stays tiny.
+@@ prelude
+typedef struct IntVec IntVec;
+IntVec *vecCreate(void);
+void vecPush(IntVec *v, int value);
+int  vecGet(const IntVec *v, int index);
+void vecSet(IntVec *v, int index, int value);
+int  vecPop(IntVec *v);
+int  vecSize(const IntVec *v);
+void vecFree(IntVec *v);
+@@ starter
+#include <stdlib.h>
+
+struct IntVec {
+    int *data;      // the elements
+    int size;       // how many are in use
+    int capacity;   // how many fit before the array must grow
+};
+
+IntVec *vecCreate(void) {
+    // TODO
+    return NULL;
+}
+
+void vecPush(IntVec *v, int value) {
+    // TODO: grow when full, then append.
+}
+
+int vecGet(const IntVec *v, int index) {
+    return v->data[index];
+}
+
+void vecSet(IntVec *v, int index, int value) {
+    v->data[index] = value;
+}
+
+int vecPop(IntVec *v) {
+    // TODO
+    return 0;
+}
+
+int vecSize(const IntVec *v) {
+    return v->size;
+}
+
+void vecFree(IntVec *v) {
+    // TODO: free everything vecCreate and vecPush allocated.
+}
+@@ solution
+#include <stdlib.h>
+
+struct IntVec {
+    int *data;
+    int size;
+    int capacity;
+};
+
+IntVec *vecCreate(void) {
+    IntVec *v = malloc(sizeof *v);
+    if (v == NULL) return NULL;
+    v->data = NULL;
+    v->size = 0;
+    v->capacity = 0;
+    return v;
+}
+
+void vecPush(IntVec *v, int value) {
+    if (v->size == v->capacity) {
+        int newCap = v->capacity ? v->capacity * 2 : 4;
+        int *bigger = realloc(v->data, newCap * sizeof *bigger);
+        if (bigger == NULL) return;          /* out of memory: keep the old array */
+        v->data = bigger;
+        v->capacity = newCap;
+    }
+    v->data[v->size++] = value;
+}
+
+int vecGet(const IntVec *v, int index) {
+    return v->data[index];
+}
+
+void vecSet(IntVec *v, int index, int value) {
+    v->data[index] = value;
+}
+
+int vecPop(IntVec *v) {
+    return v->data[--v->size];
+}
+
+int vecSize(const IntVec *v) {
+    return v->size;
+}
+
+void vecFree(IntVec *v) {
+    if (v == NULL) return;
+    free(v->data);
+    free(v);
+}
+@@ driver
+#include "lc_driver.h"
+#include <math.h>
+
+int main(void)
+{
+    while (lc_next_case()) {
+        const LcJson *ops = lc_read_json(), *args = lc_read_json();
+        int n = lc_json_len(ops), i, k, pushes = 0;
+        long long before = lc_alloc_count();
+        IntVec *v;
+        if (lc_json_len(args) != n) lc_abort_case("Invalid test case", "operations and arguments must have the same length.");
+        v = vecCreate();
+        if (!v) {
+            lc_fail("vecCreate returned NULL.");
+            lc_out_null();
+            lc_end_case();
+            continue;
+        }
+        lc_out_begin();
+        for (i = 0; i < n; i++) {
+            const char *op = lc_json_str(lc_json_at(ops, i));
+            const LcJson *a = lc_json_at(args, i);
+            if (strcmp(op, "push") == 0) {
+                vecPush(v, lc_json_int(lc_json_at(a, 0)));
+                pushes++;
+                lc_out_null();
+            } else if (strcmp(op, "pushRange") == 0) {
+                int lo = lc_json_int(lc_json_at(a, 0)), hi = lc_json_int(lc_json_at(a, 1));
+                for (k = lo; k < hi; k++, pushes++) vecPush(v, k);
+                lc_out_null();
+            } else if (strcmp(op, "get") == 0) {
+                lc_out_int(vecGet(v, lc_json_int(lc_json_at(a, 0))));
+            } else if (strcmp(op, "set") == 0) {
+                vecSet(v, lc_json_int(lc_json_at(a, 0)), lc_json_int(lc_json_at(a, 1)));
+                lc_out_null();
+            } else if (strcmp(op, "pop") == 0) {
+                lc_out_int(vecPop(v));
+            } else if (strcmp(op, "size") == 0) {
+                lc_out_int(vecSize(v));
+            } else {
+                lc_abort_case("Invalid test case", "Unknown operation \"%s\".", op);
+            }
+        }
+        lc_out_end();
+        if (pushes >= 64) {
+            long long allocs = lc_alloc_count() - before;
+            if ((double)allocs > 2.0 * log2((double)pushes) + 8.0)
+                lc_fail("Your vector made %lld allocations for %d pushes. Grow the capacity geometrically (e.g. double it) so pushes are amortized O(1).",
+                        allocs, pushes);
+        }
+        vecFree(v);
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+["size"]
+[[]]
+
+["pushRange","size","get","get","pop","size"]
+[[0,1000],[],[999],[0],[],[]]
+
+["push","push","push","push","push","pop","pop","pop","pop","pop","size","push","get"]
+[[1],[2],[3],[4],[5],[],[],[],[],[],[],[42],[0]]
+
+["pushRange","set","get","get","size"]
+[[100,164],[63,-1],[63],[0],[]]
+
+["pushRange","get","get","size"]
+[[0,20000],[12345],[19999],[]]
+@@ editorial
+## Approach: capacity doubling
+
+```c
+struct IntVec {
+    int *data;
+    int size;       // elements in use
+    int capacity;   // elements that fit
+};
+
+void vecPush(IntVec *v, int value) {
+    if (v->size == v->capacity) {
+        int newCap = v->capacity ? v->capacity * 2 : 4;
+        int *bigger = realloc(v->data, newCap * sizeof *bigger);
+        if (bigger == NULL) return;      // keep the old array on failure
+        v->data = bigger;
+        v->capacity = newCap;
+    }
+    v->data[v->size++] = value;
+}
+
+void vecFree(IntVec *v) {
+    if (v == NULL) return;
+    free(v->data);    // the elements
+    free(v);          // the struct itself
+}
+```
+
+### Why doubling is O(1) on average
+With doubling, the array is copied when it holds 4, 8, 16, ... elements. Over `n` pushes the total number of copied elements is at most `4 + 8 + ... + n < 2n`, so each push costs O(1) *amortized*. Growing by a constant amount instead (`capacity + 10`) copies about n²/20 elements in total.
+
+### `realloc` may move the block
+`realloc` can resize in place, or allocate a new block, copy, and free the old one. LeakCode's allocator always moves, so a pointer kept into the old array (`int *first = &v->data[0];`) is immediately reported as a use-after-free.
+
+### `realloc(NULL, n)`
+Starting with `data = NULL` is fine: `realloc(NULL, n)` behaves like `malloc(n)`.
+
+**Complexity:** amortized O(1) per push, O(1) get/set/pop; memory O(capacity) ≤ 2n.
+
+@@@ problem string-builder
+@@ meta
+{
+  "title": "String Builder",
+  "difficulty": "Medium",
+  "topics": ["realloc", "Strings", "Design"],
+  "kind": "design",
+  "params": [{"name": "operations", "type": "string[]"}, {"name": "arguments", "type": "any[][]"}],
+  "examples": [
+    {"input": ["[\"append\",\"appendChar\",\"length\",\"build\"]", "[[\"Leak\"],[\"C\"],[],[]]"], "output": "[null,null,5,\"LeakC\"]"},
+    {"input": ["[\"build\",\"append\",\"build\",\"append\",\"build\"]", "[[],[\"ab\"],[],[\"cd\"],[]]"], "output": "[\"\",null,\"ab\",null,\"abcd\"]", "explanation": "build returns a new copy each time; the builder keeps working afterwards."}
+  ],
+  "hints": [
+    "Keep a char buffer, its length and its capacity, like the dynamic array.",
+    "Copy the characters of s into your buffer: the caller's string may be freed right after sbAppend returns.",
+    "sbBuild returns a fresh malloc'd copy (length + 1 bytes); the caller frees it, and your buffer stays yours."
+  ],
+  "constraints": ["Total appended length <= 10^5", "appendRepeat [s, k] is a harness shortcut that calls sbAppend(sb, s) k times"],
+  "memory": "`sbAppend` must **copy** `s`: the harness frees each string right after the call. `sbBuild` returns a new block owned by the caller. Growth must be geometric. `sbFree` releases everything."
+}
+@@ description
+Building a string piece by piece with `strcat` is slow: each call rescans the whole string to find its end, and you must manage the buffer size yourself. A **string builder** keeps the length and capacity next to the buffer.
+
+```c
+typedef struct StrBuilder StrBuilder;
+
+StrBuilder *sbCreate(void);
+void  sbAppend(StrBuilder *sb, const char *s);   // append a whole string
+void  sbAppendChar(StrBuilder *sb, char c);      // append one character
+int   sbLength(const StrBuilder *sb);
+char *sbBuild(const StrBuilder *sb);             // new malloc'd copy of the contents
+void  sbFree(StrBuilder *sb);
+```
+
+Two ownership rules make this problem interesting:
+
+1. `sbAppend` **borrows** `s` only for the duration of the call. The harness frees it right after, so storing the pointer instead of copying the characters becomes a use-after-free later.
+2. `sbBuild` **gives** a new string to the caller. Don't return your internal buffer: the caller will free it.
+@@ prelude
+typedef struct StrBuilder StrBuilder;
+StrBuilder *sbCreate(void);
+void  sbAppend(StrBuilder *sb, const char *s);
+void  sbAppendChar(StrBuilder *sb, char c);
+int   sbLength(const StrBuilder *sb);
+char *sbBuild(const StrBuilder *sb);
+void  sbFree(StrBuilder *sb);
+@@ starter
+#include <stdlib.h>
+#include <string.h>
+
+struct StrBuilder {
+    char *buf;      // the characters (not necessarily NUL-terminated)
+    int len;        // characters in use
+    int cap;        // capacity of buf
+};
+
+StrBuilder *sbCreate(void) {
+    // TODO
+    return NULL;
+}
+
+void sbAppend(StrBuilder *sb, const char *s) {
+    // TODO: copy the characters of s into sb (grow if needed).
+}
+
+void sbAppendChar(StrBuilder *sb, char c) {
+    // TODO
+}
+
+int sbLength(const StrBuilder *sb) {
+    return sb->len;
+}
+
+char *sbBuild(const StrBuilder *sb) {
+    // TODO: return a new NUL-terminated copy.
+    return NULL;
+}
+
+void sbFree(StrBuilder *sb) {
+    // TODO
+}
+@@ solution
+#include <stdlib.h>
+#include <string.h>
+
+struct StrBuilder {
+    char *buf;
+    int len;
+    int cap;
+};
+
+StrBuilder *sbCreate(void) {
+    StrBuilder *sb = calloc(1, sizeof *sb);   /* buf = NULL, len = cap = 0 */
+    return sb;
+}
+
+static int reserve(StrBuilder *sb, int extra) {
+    if (sb->len + extra <= sb->cap) return 1;
+    int cap = sb->cap ? sb->cap : 16;
+    while (cap < sb->len + extra) cap *= 2;
+    char *bigger = realloc(sb->buf, cap);
+    if (bigger == NULL) return 0;
+    sb->buf = bigger;
+    sb->cap = cap;
+    return 1;
+}
+
+void sbAppend(StrBuilder *sb, const char *s) {
+    int n = (int)strlen(s);
+    if (!reserve(sb, n)) return;
+    memcpy(sb->buf + sb->len, s, n);
+    sb->len += n;
+}
+
+void sbAppendChar(StrBuilder *sb, char c) {
+    if (!reserve(sb, 1)) return;
+    sb->buf[sb->len++] = c;
+}
+
+int sbLength(const StrBuilder *sb) {
+    return sb->len;
+}
+
+char *sbBuild(const StrBuilder *sb) {
+    char *out = malloc(sb->len + 1);
+    if (out == NULL) return NULL;
+    if (sb->len) memcpy(out, sb->buf, sb->len);
+    out[sb->len] = '\0';
+    return out;
+}
+
+void sbFree(StrBuilder *sb) {
+    if (sb == NULL) return;
+    free(sb->buf);
+    free(sb);
+}
+@@ driver
+#include "lc_driver.h"
+#include <math.h>
+
+int main(void)
+{
+    while (lc_next_case()) {
+        const LcJson *ops = lc_read_json(), *args = lc_read_json();
+        int n = lc_json_len(ops), i, k, builds = 0;
+        long long appended = 0, before = lc_alloc_count();
+        StrBuilder *sb;
+        if (lc_json_len(args) != n) lc_abort_case("Invalid test case", "operations and arguments must have the same length.");
+        sb = sbCreate();
+        if (!sb) {
+            lc_fail("sbCreate returned NULL.");
+            lc_out_null();
+            lc_end_case();
+            continue;
+        }
+        lc_out_begin();
+        for (i = 0; i < n; i++) {
+            const char *op = lc_json_str(lc_json_at(ops, i));
+            const LcJson *a = lc_json_at(args, i);
+            if (strcmp(op, "append") == 0 || strcmp(op, "appendRepeat") == 0) {
+                int times = strcmp(op, "append") == 0 ? 1 : lc_json_int(lc_json_at(a, 1));
+                for (k = 0; k < times; k++) {
+                    char *s = lc_harness_str(lc_json_at(a, 0));
+                    lc_make_readonly(s);
+                    sbAppend(sb, s);
+                    appended += (long long)strlen(s);
+                    lc_harness_release(s);   /* the caller's string is gone after the call */
+                }
+                lc_out_null();
+            } else if (strcmp(op, "appendChar") == 0) {
+                const char *c = lc_json_str(lc_json_at(a, 0));
+                sbAppendChar(sb, c[0]);
+                appended++;
+                lc_out_null();
+            } else if (strcmp(op, "length") == 0) {
+                lc_out_int(sbLength(sb));
+            } else if (strcmp(op, "build") == 0) {
+                char *s = sbBuild(sb);
+                builds++;
+                lc_out_str(s);
+                if (s) LC_FREE_RESULT(s, "the string returned by sbBuild()");
+            } else {
+                lc_abort_case("Invalid test case", "Unknown operation \"%s\".", op);
+            }
+        }
+        lc_out_end();
+        if (appended >= 256) {
+            long long allocs = lc_alloc_count() - before - builds;
+            if ((double)allocs > 2.0 * log2((double)appended) + 8.0)
+                lc_fail("Your builder made %lld allocations while %lld characters were appended. Grow the buffer geometrically (e.g. double it).",
+                        allocs, appended);
+        }
+        sbFree(sb);
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+["length","build"]
+[[],[]]
+
+["appendRepeat","length","build"]
+[["xy",200],[],[]]
+
+["appendChar","appendChar","appendChar","build","append","length"]
+[["a"],["b"],["c"],[],["defg"],[]]
+
+["append","append","append","build"]
+[[""],["memory"],[""],[]]
+
+["appendRepeat","appendChar","length"]
+[["0123456789",5000],["!"],[]]
+@@ editorial
+## Approach: a growable char buffer
+
+```c
+struct StrBuilder { char *buf; int len; int cap; };
+
+static int reserve(StrBuilder *sb, int extra) {      // make room for extra chars
+    if (sb->len + extra <= sb->cap) return 1;
+    int cap = sb->cap ? sb->cap : 16;
+    while (cap < sb->len + extra) cap *= 2;
+    char *bigger = realloc(sb->buf, cap);
+    if (bigger == NULL) return 0;
+    sb->buf = bigger;
+    sb->cap = cap;
+    return 1;
+}
+
+void sbAppend(StrBuilder *sb, const char *s) {
+    int n = (int)strlen(s);
+    if (!reserve(sb, n)) return;
+    memcpy(sb->buf + sb->len, s, n);    // copy: s is only borrowed
+    sb->len += n;
+}
+
+char *sbBuild(const StrBuilder *sb) {
+    char *out = malloc(sb->len + 1);    // a new block for the caller
+    if (out == NULL) return NULL;
+    if (sb->len) memcpy(out, sb->buf, sb->len);
+    out[sb->len] = '\0';
+    return out;
+}
+```
+
+### Borrowing vs owning
+A `const char *` parameter is a *loan*: valid while the function runs, with no promise about later. If a data structure needs the data later, it must **copy** it. Storing `sb->parts[i] = s` looks fine in a quick test, then breaks as soon as the caller reuses or frees its buffer.
+
+### Why keep the buffer unterminated?
+Tracking `len` means you never need `strlen` on your own buffer, and appends are O(length of the appended string). The `'\0'` is added only in `sbBuild`.
+
+### `calloc` for zeroed structs
+`calloc(1, sizeof *sb)` returns a zero-filled struct: `buf == NULL`, `len == cap == 0`, a convenient starting state.
+
+**Complexity:** amortized O(k) per append of k characters; O(n) per build.
+
+@@@ problem run-length-encoding
+@@ meta
+{
+  "title": "Run-Length Encoding",
+  "difficulty": "Medium",
+  "topics": ["Strings", "malloc", "Sizing"],
+  "params": [{"name": "s", "type": "string"}],
+  "examples": [
+    {"input": ["\"aaabccdddd\""], "output": "\"a3b1c2d4\""},
+    {"input": ["\"aaaaaaaaaaaa\""], "output": "\"a12\"", "explanation": "Counts can have several digits."},
+    {"input": ["\"\""], "output": "\"\""}
+  ],
+  "hints": [
+    "You can't know the output size without looking at the runs. Either measure first, or grow a buffer.",
+    "snprintf(NULL, 0, \"%d\", count) returns the number of digits count needs.",
+    "Upper bound: every run produces at least 2 characters and at most 1 + digits, so 2 * strlen(s) + 1 bytes always suffice."
+  ],
+  "constraints": ["0 <= strlen(s) <= 10^4", "s contains printable characters, no digits"],
+  "memory": "Return a new block from `malloc`; the caller frees it."
+}
+@@ description
+Compress `s` by replacing each run of identical characters with the character followed by the length of the run.
+
+```c
+char *rleEncode(const char *s);
+```
+
+`"aaabccdddd"` → `"a3b1c2d4"`.
+
+The output's size depends on the input in a non-obvious way: a run of 9 takes 2 characters but a run of 10 takes 3. Getting the size right is the real exercise. Measure the result exactly before allocating, or start from a safe upper bound.
+@@ prelude
+char *rleEncode(const char *s);
+@@ starter
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+char *rleEncode(const char *s) {
+    // TODO
+    return NULL;
+}
+@@ solution
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+char *rleEncode(const char *s) {
+    /* pass 1: exact length */
+    size_t total = 0;
+    for (const char *p = s; *p; ) {
+        const char *q = p;
+        while (*q == *p) q++;
+        total += 1 + (size_t)snprintf(NULL, 0, "%d", (int)(q - p));
+        p = q;
+    }
+    char *out = malloc(total + 1);
+    if (out == NULL) return NULL;
+    /* pass 2: write */
+    char *w = out;
+    for (const char *p = s; *p; ) {
+        const char *q = p;
+        while (*q == *p) q++;
+        w += sprintf(w, "%c%d", *p, (int)(q - p));
+        p = q;
+    }
+    *w = '\0';
+    return out;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        char *s = lc_read_str();
+        char *r;
+        lc_make_readonly(s);
+        r = rleEncode(s);
+        if (!r) {
+            lc_fail("rleEncode returned NULL. Return a malloc'd string (also when it is empty).");
+            lc_out_null();
+        } else {
+            lc_out_str(r);
+            LC_FREE_RESULT(r, "the string returned by rleEncode()");
+        }
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+"a"
+
+"abc"
+
+"aabbbaa"
+
+"zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+
+"aaaaaaaaab"
+
+"aaaaaaaaaab"
+
+"  !!"
+@@ editorial
+## Approach: measure exactly, then write
+
+```c
+char *rleEncode(const char *s) {
+    size_t total = 0;                              // pass 1: exact size
+    for (const char *p = s; *p; ) {
+        const char *q = p;
+        while (*q == *p) q++;                      // q = end of the run
+        total += 1 + (size_t)snprintf(NULL, 0, "%d", (int)(q - p));
+        p = q;
+    }
+    char *out = malloc(total + 1);
+    if (out == NULL) return NULL;
+    char *w = out;                                 // pass 2: write
+    for (const char *p = s; *p; ) {
+        const char *q = p;
+        while (*q == *p) q++;
+        w += sprintf(w, "%c%d", *p, (int)(q - p)); // sprintf returns chars written
+        p = q;
+    }
+    *w = '\0';
+    return out;
+}
+```
+
+### `snprintf(NULL, 0, ...)` measures
+With a NULL buffer and size 0, `snprintf` writes nothing and returns how many characters the output *would* have. It is the standard way to size a buffer before formatting into it.
+
+### Upper bound alternative
+Each run of length `k` costs `1 + digits(k) <= 1 + k` characters, so the output never exceeds `2 * strlen(s)`. Allocating `2 * strlen(s) + 1` bytes and writing in one pass is simpler; follow it with `realloc` to shrink if memory matters.
+
+### Why the inner `while (*q == *p)` stops at the end
+The `'\0'` never equals a real character, so the run ends at the terminator without a separate length check.
+
+**Complexity:** O(n) time, O(output) memory.
+
+@@@ problem ring-buffer
+@@ meta
+{
+  "title": "Ring Buffer",
+  "difficulty": "Medium",
+  "topics": ["Design", "Arrays", "Fixed capacity"],
+  "kind": "design",
+  "params": [{"name": "capacity", "type": "int"}, {"name": "operations", "type": "string[]"}, {"name": "arguments", "type": "any[][]"}],
+  "examples": [
+    {"input": ["3", "[\"enqueue\",\"enqueue\",\"enqueue\",\"enqueue\",\"rear\",\"isFull\",\"dequeue\",\"enqueue\",\"rear\"]", "[[1],[2],[3],[4],[],[],[],[4],[]]"], "output": "[true,true,true,false,3,true,true,true,4]", "explanation": "The 4th enqueue fails because the buffer is full. After a dequeue there is room again, and the new element wraps around to the front of the array."}
+  ],
+  "hints": [
+    "Store a head index and a count. The tail is (head + count) % capacity.",
+    "Dequeue just advances head: head = (head + 1) % capacity.",
+    "Allocate the array once in rbCreate: enqueue and dequeue never allocate."
+  ],
+  "constraints": ["1 <= capacity <= 1000", "front and rear return -1 when the buffer is empty"],
+  "memory": "All memory is allocated in `rbCreate`. `rbEnqueue`/`rbDequeue` must not allocate or free. `rbFree` releases everything."
+}
+@@ description
+A **ring buffer** (circular queue) stores up to `capacity` elements in a fixed array. When the end of the array is reached, it wraps around to the beginning, so no memory is ever moved or reallocated: ideal for audio buffers, network packets, logs and keyboard input.
+
+```c
+typedef struct RingBuffer RingBuffer;
+
+RingBuffer *rbCreate(int capacity);
+bool rbEnqueue(RingBuffer *q, int value);   // false if full
+bool rbDequeue(RingBuffer *q);              // false if empty
+int  rbFront(const RingBuffer *q);          // -1 if empty
+int  rbRear(const RingBuffer *q);           // -1 if empty
+bool rbIsEmpty(const RingBuffer *q);
+bool rbIsFull(const RingBuffer *q);
+void rbFree(RingBuffer *q);
+```
+
+The harness calls `rbCreate(capacity)`, runs the operations, then `rbFree`. It checks that no allocations happen after creation.
+@@ prelude
+#include <stdbool.h>
+typedef struct RingBuffer RingBuffer;
+RingBuffer *rbCreate(int capacity);
+bool rbEnqueue(RingBuffer *q, int value);
+bool rbDequeue(RingBuffer *q);
+int  rbFront(const RingBuffer *q);
+int  rbRear(const RingBuffer *q);
+bool rbIsEmpty(const RingBuffer *q);
+bool rbIsFull(const RingBuffer *q);
+void rbFree(RingBuffer *q);
+@@ starter
+#include <stdbool.h>
+#include <stdlib.h>
+
+struct RingBuffer {
+    int *items;
+    int capacity;
+    int head;       // index of the front element
+    int count;      // number of stored elements
+};
+
+RingBuffer *rbCreate(int capacity) {
+    // TODO
+    return NULL;
+}
+
+bool rbEnqueue(RingBuffer *q, int value) {
+    // TODO
+    return false;
+}
+
+bool rbDequeue(RingBuffer *q) {
+    // TODO
+    return false;
+}
+
+int rbFront(const RingBuffer *q) {
+    // TODO
+    return -1;
+}
+
+int rbRear(const RingBuffer *q) {
+    // TODO
+    return -1;
+}
+
+bool rbIsEmpty(const RingBuffer *q) {
+    return q->count == 0;
+}
+
+bool rbIsFull(const RingBuffer *q) {
+    return q->count == q->capacity;
+}
+
+void rbFree(RingBuffer *q) {
+    // TODO
+}
+@@ solution
+#include <stdbool.h>
+#include <stdlib.h>
+
+struct RingBuffer {
+    int *items;
+    int capacity;
+    int head;
+    int count;
+};
+
+RingBuffer *rbCreate(int capacity) {
+    RingBuffer *q = malloc(sizeof *q);
+    if (q == NULL) return NULL;
+    q->items = malloc(capacity * sizeof *q->items);
+    if (q->items == NULL) {
+        free(q);
+        return NULL;
+    }
+    q->capacity = capacity;
+    q->head = 0;
+    q->count = 0;
+    return q;
+}
+
+bool rbEnqueue(RingBuffer *q, int value) {
+    if (q->count == q->capacity) return false;
+    q->items[(q->head + q->count) % q->capacity] = value;
+    q->count++;
+    return true;
+}
+
+bool rbDequeue(RingBuffer *q) {
+    if (q->count == 0) return false;
+    q->head = (q->head + 1) % q->capacity;
+    q->count--;
+    return true;
+}
+
+int rbFront(const RingBuffer *q) {
+    return q->count ? q->items[q->head] : -1;
+}
+
+int rbRear(const RingBuffer *q) {
+    return q->count ? q->items[(q->head + q->count - 1) % q->capacity] : -1;
+}
+
+bool rbIsEmpty(const RingBuffer *q) {
+    return q->count == 0;
+}
+
+bool rbIsFull(const RingBuffer *q) {
+    return q->count == q->capacity;
+}
+
+void rbFree(RingBuffer *q) {
+    if (q == NULL) return;
+    free(q->items);
+    free(q);
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int cap = lc_read_int();
+        const LcJson *ops = lc_read_json(), *args = lc_read_json();
+        int n = lc_json_len(ops), i;
+        long long afterCreate;
+        RingBuffer *q;
+        if (lc_json_len(args) != n) lc_abort_case("Invalid test case", "operations and arguments must have the same length.");
+        q = rbCreate(cap);
+        if (!q) {
+            lc_fail("rbCreate returned NULL.");
+            lc_out_null();
+            lc_end_case();
+            continue;
+        }
+        afterCreate = lc_alloc_count();
+        lc_out_begin();
+        for (i = 0; i < n; i++) {
+            const char *op = lc_json_str(lc_json_at(ops, i));
+            const LcJson *a = lc_json_at(args, i);
+            if (strcmp(op, "enqueue") == 0) lc_out_bool(rbEnqueue(q, lc_json_int(lc_json_at(a, 0))));
+            else if (strcmp(op, "dequeue") == 0) lc_out_bool(rbDequeue(q));
+            else if (strcmp(op, "front") == 0) lc_out_int(rbFront(q));
+            else if (strcmp(op, "rear") == 0) lc_out_int(rbRear(q));
+            else if (strcmp(op, "isEmpty") == 0) lc_out_bool(rbIsEmpty(q));
+            else if (strcmp(op, "isFull") == 0) lc_out_bool(rbIsFull(q));
+            else lc_abort_case("Invalid test case", "Unknown operation \"%s\".", op);
+        }
+        lc_out_end();
+        if (lc_alloc_count() != afterCreate)
+            lc_fail("Your ring buffer allocated memory after rbCreate. A ring buffer reuses its fixed array.");
+        rbFree(q);
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+1
+["isEmpty","front","rear","dequeue","enqueue","isFull","front","rear","enqueue","dequeue","isEmpty"]
+[[],[],[],[],[7],[],[],[],[8],[],[]]
+
+2
+["enqueue","enqueue","dequeue","enqueue","dequeue","enqueue","dequeue","enqueue","front","rear","dequeue","front"]
+[[1],[2],[],[3],[],[4],[],[5],[],[],[],[]]
+
+4
+["enqueue","enqueue","enqueue","dequeue","dequeue","enqueue","enqueue","enqueue","isFull","front","rear","enqueue"]
+[[10],[20],[30],[],[],[40],[50],[60],[],[],[],[70]]
+
+5
+["dequeue","isEmpty","isFull","enqueue","rear","front"]
+[[],[],[],[-3],[],[]]
+@@ editorial
+## Approach: head index + count
+
+```c
+struct RingBuffer { int *items; int capacity; int head; int count; };
+
+bool rbEnqueue(RingBuffer *q, int value) {
+    if (q->count == q->capacity) return false;
+    q->items[(q->head + q->count) % q->capacity] = value;   // slot after the last
+    q->count++;
+    return true;
+}
+
+bool rbDequeue(RingBuffer *q) {
+    if (q->count == 0) return false;
+    q->head = (q->head + 1) % q->capacity;                  // forget the front
+    q->count--;
+    return true;
+}
+
+int rbRear(const RingBuffer *q) {
+    return q->count ? q->items[(q->head + q->count - 1) % q->capacity] : -1;
+}
+```
+
+### Why a count?
+With only `head` and `tail` indices, "full" and "empty" both look like `head == tail`. Keeping a `count` (or wasting one slot) removes the ambiguity.
+
+### No moving, no allocating
+Dequeuing from the front of a normal array means shifting every element (O(n)). The ring buffer just moves `head`. After `rbCreate`, the memory footprint never changes, which matters in embedded and real-time code where `malloc` at the wrong moment is not allowed.
+
+**Complexity:** O(1) per operation, O(capacity) memory.

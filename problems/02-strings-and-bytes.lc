@@ -1,0 +1,603 @@
+@@@ section
+{"id": "strings", "title": "Strings & Bytes", "summary": "C strings are just bytes ending in '\\0'. Learn to walk, copy and reshape them without stepping outside the buffer."}
+
+@@@ problem string-length
+@@ meta
+{
+  "title": "String Length",
+  "difficulty": "Easy",
+  "topics": ["Strings", "Pointers"],
+  "params": [{"name": "s", "type": "string"}],
+  "examples": [
+    {"input": ["\"hello\""], "output": "5", "explanation": "The string occupies 6 bytes: 'h','e','l','l','o' and the terminating '\\0'. The length counts only the first 5."},
+    {"input": ["\"\""], "output": "0", "explanation": "The empty string is a single '\\0' byte."}
+  ],
+  "hints": [
+    "Keep reading characters until you reach the byte '\\0'.",
+    "With a pointer: advance p while *p != '\\0'; the answer is p - s."
+  ],
+  "constraints": ["0 <= strlen(s) <= 10^4", "s is NUL-terminated"]
+}
+@@ description
+Implement your own version of `strlen`: return the number of characters in `s` **before** the terminating null byte `'\0'`.
+
+```c
+size_t myStrlen(const char *s);
+```
+
+A C string has no stored length. It is just a sequence of `char`s that ends with a byte whose value is `0`. Every string function in the standard library finds the end the same way you will: by scanning for that byte.
+
+> **Memory check:** the string is placed so that its `'\0'` is the very last byte of its block. Reading one byte further is reported as a heap buffer overflow.
+@@ prelude
+size_t myStrlen(const char *s);
+@@ starter
+#include <stddef.h>
+
+size_t myStrlen(const char *s) {
+    // TODO: count the characters before the terminating '\0'.
+    return 0;
+}
+@@ solution
+#include <stddef.h>
+
+size_t myStrlen(const char *s) {
+    const char *p = s;
+    while (*p != '\0')
+        p++;
+    return (size_t)(p - s);
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        char *s = lc_read_str();
+        lc_make_readonly(s);
+        lc_out_int((long long)myStrlen(s));
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+"C"
+
+"memory management"
+
+"tabs\tand\nnewlines"
+
+"   "
+
+"The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog."
+@@ editorial
+## Approach: scan for the terminator
+
+```c
+size_t myStrlen(const char *s) {
+    const char *p = s;
+    while (*p != '\0')
+        p++;
+    return (size_t)(p - s);   // pointer difference = number of chars passed
+}
+```
+
+Subtracting two pointers into the same array gives the number of **elements** between them. Here the elements are `char`s, so it is exactly the length.
+
+### Why `size_t`?
+`size_t` is the unsigned type C uses for sizes and lengths. It is 64 bits wide here, so it can describe any object in memory. Print it with `%zu`.
+
+### What strlen costs
+`strlen` is **O(n)**: it has to walk the whole string every time. A loop like `for (i = 0; i < strlen(s); i++)` re-scans the string on every iteration and becomes O(n²). Compute the length once and store it.
+
+**Complexity:** O(n) time, O(1) extra memory.
+
+@@@ problem reverse-a-string
+@@ meta
+{
+  "title": "Reverse a String In Place",
+  "difficulty": "Easy",
+  "topics": ["Strings", "Two pointers"],
+  "params": [{"name": "s", "type": "string"}],
+  "examples": [
+    {"input": ["\"hello\""], "output": "\"olleh\""},
+    {"input": ["\"ab\""], "output": "\"ba\""},
+    {"input": ["\"\""], "output": "\"\""}
+  ],
+  "hints": [
+    "Find the length first, then swap characters from both ends toward the middle.",
+    "The '\\0' must stay where it is: reverse only the characters before it."
+  ],
+  "constraints": ["0 <= strlen(s) <= 10^4", "s is a writable buffer"]
+}
+@@ description
+Reverse the string `s` **in place**: rearrange its characters inside the buffer you were given. The terminating `'\0'` stays at the end.
+
+```c
+void reverseString(char *s);
+```
+
+The harness prints `s` after your function returns.
+
+Note that `s` is `char *`, not `const char *`: this time you are allowed, and expected, to modify the caller's memory.
+@@ prelude
+void reverseString(char *s);
+@@ starter
+#include <string.h>
+
+void reverseString(char *s) {
+    // TODO: swap characters from both ends toward the middle.
+}
+@@ solution
+#include <string.h>
+
+void reverseString(char *s) {
+    size_t n = strlen(s);
+    if (n < 2) return;
+    char *lo = s, *hi = s + n - 1;
+    while (lo < hi) {
+        char tmp = *lo;
+        *lo++ = *hi;
+        *hi-- = tmp;
+    }
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        char *s = lc_read_str();
+        reverseString(s);
+        lc_out_str(s);
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+"a"
+
+"racecar"
+
+"LeakCode!"
+
+"12345 67890"
+
+"A man, a plan, a canal: Panama"
+@@ editorial
+## Approach: two pointers over the characters
+
+```c
+void reverseString(char *s) {
+    size_t n = strlen(s);
+    if (n < 2) return;
+    char *lo = s, *hi = s + n - 1;   // last character, not the '\0'
+    while (lo < hi) {
+        char tmp = *lo;
+        *lo++ = *hi;
+        *hi-- = tmp;
+    }
+}
+```
+
+The key detail is `hi = s + n - 1`: `s + n` is the `'\0'`. Swapping it to the front would turn the result into an empty string.
+
+### Writable vs read-only strings
+```c
+char a[] = "hello";   // an array: a writable copy of the literal
+char *b = "hello";    // a pointer to the literal itself: read-only!
+reverseString(a);     // fine
+reverseString(b);     // undefined behavior: usually a crash
+```
+String literals live in read-only static memory. Only modify strings you own: arrays, or blocks from `malloc`.
+
+**Complexity:** O(n) time, O(1) extra memory.
+
+@@@ problem bytes-of-an-integer
+@@ meta
+{
+  "title": "Bytes of an Integer",
+  "difficulty": "Easy",
+  "topics": ["Bytes", "Bit manipulation", "Endianness"],
+  "params": [{"name": "value", "type": "long"}],
+  "examples": [
+    {"input": ["305419896"], "output": "[[120,86,52,18],305419896]", "explanation": "305419896 is 0x12345678. Little-endian order stores the lowest byte first: 0x78 (120), 0x56 (86), 0x34 (52), 0x12 (18)."},
+    {"input": ["1"], "output": "[[1,0,0,0],1]"}
+  ],
+  "hints": [
+    "The lowest byte is value & 0xFF. The next one is (value >> 8) & 0xFF.",
+    "To rebuild the number, shift each byte back into place and combine with |. Cast to uint32_t before shifting."
+  ],
+  "constraints": ["0 <= value <= 2^32 - 1"]
+}
+@@ description
+Every object in memory is a sequence of bytes. A `uint32_t` occupies 4 of them, and a CPU must choose an order to store them in. x86 and ARM computers are **little-endian**: the least significant byte comes first.
+
+Write two functions:
+
+```c
+void toLittleEndian(uint32_t value, unsigned char out[4]);
+uint32_t fromLittleEndian(const unsigned char bytes[4]);
+```
+
+- `toLittleEndian` stores the 4 bytes of `value` into `out`, least significant first.
+- `fromLittleEndian` does the reverse: it combines 4 little-endian bytes back into a number.
+
+The harness prints `[bytes, n]`, where `bytes` is what `toLittleEndian` produced and `n` is the result of `fromLittleEndian` applied to the correct bytes of `value`.
+
+Use shifts and masks rather than relying on the machine's byte order: that way your code is correct on any computer.
+@@ prelude
+#include <stdint.h>
+void toLittleEndian(uint32_t value, unsigned char out[4]);
+uint32_t fromLittleEndian(const unsigned char bytes[4]);
+@@ starter
+#include <stdint.h>
+
+void toLittleEndian(uint32_t value, unsigned char out[4]) {
+    // TODO: out[0] is the least significant byte.
+}
+
+uint32_t fromLittleEndian(const unsigned char bytes[4]) {
+    // TODO: combine the 4 bytes back into one number.
+    return 0;
+}
+@@ solution
+#include <stdint.h>
+
+void toLittleEndian(uint32_t value, unsigned char out[4]) {
+    for (int i = 0; i < 4; i++)
+        out[i] = (unsigned char)((value >> (8 * i)) & 0xFF);
+}
+
+uint32_t fromLittleEndian(const unsigned char bytes[4]) {
+    uint32_t v = 0;
+    for (int i = 0; i < 4; i++)
+        v |= (uint32_t)bytes[i] << (8 * i);
+    return v;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        uint32_t value = (uint32_t)lc_read_ll();
+        unsigned char *out = (unsigned char *)lc_harness_alloc(4);
+        unsigned char *in = (unsigned char *)lc_harness_alloc(4);
+        int i;
+        memset(out, 0xAA, 4);
+        toLittleEndian(value, out);
+        for (i = 0; i < 4; i++) in[i] = (unsigned char)(value >> (8 * i));
+        lc_make_readonly(in);
+        lc_out_begin();
+        lc_out_begin();
+        for (i = 0; i < 4; i++) lc_out_int(out[i]);
+        lc_out_end();
+        lc_out_int((long long)fromLittleEndian(in));
+        lc_out_end();
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+0
+
+255
+
+256
+
+65535
+
+4294967295
+
+3735928559
+
+2147483648
+@@ editorial
+## Approach: shifts and masks
+
+```c
+void toLittleEndian(uint32_t value, unsigned char out[4]) {
+    for (int i = 0; i < 4; i++)
+        out[i] = (unsigned char)((value >> (8 * i)) & 0xFF);
+}
+
+uint32_t fromLittleEndian(const unsigned char bytes[4]) {
+    uint32_t v = 0;
+    for (int i = 0; i < 4; i++)
+        v |= (uint32_t)bytes[i] << (8 * i);
+    return v;
+}
+```
+
+`value >> 8*i` moves byte `i` down to the lowest position and `& 0xFF` keeps only those 8 bits.
+
+### Why cast before shifting?
+`bytes[i]` is promoted to `int` before the shift. `0xDE << 24` overflows a signed `int`, which is undefined behavior. Casting to `uint32_t` first makes the shift well defined.
+
+### Looking at the bytes directly
+You can also inspect an object's bytes through an `unsigned char *`, which C always allows:
+```c
+uint32_t x = 0x12345678;
+unsigned char *p = (unsigned char *)&x;
+// on a little-endian machine: p[0] == 0x78
+```
+or copy them with `memcpy(out, &value, 4)`. Both give the **machine's** order, so they are only "little-endian" on little-endian hardware. Network protocols and file formats specify an order, which is why shift-based code is the portable choice.
+
+**Complexity:** O(1).
+
+@@@ problem safe-string-copy
+@@ meta
+{
+  "title": "Safe String Copy",
+  "difficulty": "Medium",
+  "topics": ["Strings", "Buffers", "Bounds"],
+  "params": [{"name": "src", "type": "string"}, {"name": "dstSize", "type": "int"}],
+  "examples": [
+    {"input": ["\"hello\"", "10"], "output": "[\"hello\",5]", "explanation": "Everything fits: 5 characters plus '\\0' need 6 of the 10 bytes."},
+    {"input": ["\"hello\"", "4"], "output": "[\"hel\",5]", "explanation": "Only 3 characters fit next to the '\\0'. The return value 5 >= 4 tells the caller the copy was truncated."},
+    {"input": ["\"hello\"", "0"], "output": "[null,5]", "explanation": "With a 0-byte buffer nothing may be written at all (the harness prints null for the empty buffer)."}
+  ],
+  "hints": [
+    "You may copy at most dstSize - 1 characters, then you must write the '\\0'.",
+    "Handle dstSize == 0 first: then dst has no room even for the terminator.",
+    "The return value is always strlen(src), whether or not everything fit."
+  ],
+  "constraints": ["0 <= strlen(src) <= 1000", "0 <= dstSize <= 1000", "dst points to exactly dstSize writable bytes"]
+}
+@@ description
+`strcpy(dst, src)` has no idea how big `dst` is: if `src` is too long, it writes past the end. It is the source of countless security bugs. Implement a **bounded** copy instead (the BSD function `strlcpy` works this way):
+
+```c
+size_t safeCopy(char *dst, size_t dstSize, const char *src);
+```
+
+- `dst` points to a buffer of exactly `dstSize` bytes.
+- Copy as much of `src` as fits, and **always** terminate `dst` with `'\0'` (when `dstSize > 0`).
+- Never write more than `dstSize` bytes.
+- Return `strlen(src)`. The caller detects truncation with `safeCopy(...) >= dstSize`.
+
+The harness prints `[dst, returnValue]`.
+
+> **Memory check:** `dst` is allocated with exactly `dstSize` bytes. Writing even one byte too many is reported as a heap buffer overflow, and a `dst` without its `'\0'` crashes the harness when it reads your result.
+@@ prelude
+size_t safeCopy(char *dst, size_t dstSize, const char *src);
+@@ starter
+#include <stddef.h>
+
+size_t safeCopy(char *dst, size_t dstSize, const char *src) {
+    // TODO: copy at most dstSize - 1 chars, always terminate, return strlen(src).
+    return 0;
+}
+@@ solution
+#include <stddef.h>
+
+size_t safeCopy(char *dst, size_t dstSize, const char *src) {
+    size_t len = 0;
+    while (src[len] != '\0')
+        len++;
+    if (dstSize > 0) {
+        size_t n = len < dstSize - 1 ? len : dstSize - 1;
+        for (size_t i = 0; i < n; i++)
+            dst[i] = src[i];
+        dst[n] = '\0';
+    }
+    return len;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        char *src = lc_read_str();
+        int size = lc_read_int();
+        char *dst;
+        size_t ret;
+        if (size < 0) lc_abort_case("Invalid test case", "dstSize must not be negative.");
+        dst = (char *)lc_harness_alloc((size_t)size);
+        lc_make_readonly(src);
+        ret = safeCopy(dst, (size_t)size, src);
+        lc_out_begin();
+        if (size > 0) lc_out_str(dst);
+        else lc_out_null();
+        lc_out_int((long long)ret);
+        lc_out_end();
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+"hello"
+6
+
+"hello"
+5
+
+"hello"
+1
+
+""
+4
+
+""
+0
+
+"memory"
+3
+
+"A longer source string that will certainly not fit"
+16
+@@ editorial
+## Approach: measure, then copy what fits
+
+```c
+size_t safeCopy(char *dst, size_t dstSize, const char *src) {
+    size_t len = 0;
+    while (src[len] != '\0')
+        len++;
+    if (dstSize > 0) {
+        size_t n = len < dstSize - 1 ? len : dstSize - 1;   // room for the '\0'
+        for (size_t i = 0; i < n; i++)
+            dst[i] = src[i];
+        dst[n] = '\0';
+    }
+    return len;
+}
+```
+
+### The `dstSize == 0` trap
+`dstSize` is a `size_t`, which is unsigned. With `dstSize == 0`, `dstSize - 1` is not -1 but **18446744073709551615**, and a careless loop would happily write that many bytes. The `if (dstSize > 0)` check comes first for exactly this reason.
+
+### Why return `strlen(src)`?
+The caller learns both "did it fit?" (`ret < dstSize`) and "how big a buffer would I need?" (`ret + 1`). `snprintf` reports truncation the same way.
+
+### And `strncpy`?
+Despite its name, `strncpy(dst, src, n)` is **not** a safe `strcpy`: when `src` has `n` or more characters it leaves `dst` without a terminator. Prefer `snprintf(dst, size, "%s", src)` in real code.
+
+**Complexity:** O(len(src)) time, O(1) extra memory.
+
+@@@ problem implement-memmove
+@@ meta
+{
+  "title": "Implement memmove",
+  "difficulty": "Medium",
+  "topics": ["Memory", "void pointers", "Overlap"],
+  "params": [{"name": "buf", "type": "string"}, {"name": "dst", "type": "int"}, {"name": "src", "type": "int"}, {"name": "n", "type": "int"}],
+  "examples": [
+    {"input": ["\"abcdefgh\"", "2", "0", "5"], "output": "\"ababcdeh\"", "explanation": "Copy the 5 bytes \"abcde\" to offset 2. The ranges overlap, and the destination is after the source."},
+    {"input": ["\"abcdefgh\"", "0", "2", "5"], "output": "\"cdefgfgh\"", "explanation": "Copy \"cdefg\" to offset 0. The destination is before the source."},
+    {"input": ["\"hello world\"", "6", "0", "5"], "output": "\"hello hello\"", "explanation": "No overlap: any copy order works."}
+  ],
+  "hints": [
+    "Convert the void pointers to unsigned char pointers so you can copy byte by byte.",
+    "If you copy front to back while the destination is after the source, you overwrite bytes before reading them.",
+    "When dst > src, copy from the last byte down to the first."
+  ],
+  "constraints": ["0 <= n", "0 <= dst + n <= strlen(buf)", "0 <= src + n <= strlen(buf)"]
+}
+@@ description
+Implement `memmove`: copy `n` bytes from `src` to `dst` and return `dst`. Unlike `memcpy`, the two regions **may overlap**, and the result must be as if the bytes were first copied to a temporary buffer.
+
+```c
+void *myMemmove(void *dst, const void *src, size_t n);
+```
+
+Both regions are inside the same buffer `buf`. The harness calls `myMemmove(buf + dst, buf + src, n)` and prints the buffer afterwards. It also checks that you return `dst`.
+
+`void *` is a generic pointer: it can hold the address of anything, but you can't dereference it or do arithmetic on it. Convert it to `unsigned char *` to work with raw bytes.
+
+Don't call `memmove` or `memcpy`, and don't allocate a temporary buffer: copy in the right direction instead.
+@@ prelude
+void *myMemmove(void *dst, const void *src, size_t n);
+@@ starter
+#include <stddef.h>
+
+void *myMemmove(void *dst, const void *src, size_t n) {
+    // TODO: copy n bytes; the regions may overlap.
+    return dst;
+}
+@@ solution
+#include <stddef.h>
+
+void *myMemmove(void *dst, const void *src, size_t n) {
+    unsigned char *d = dst;
+    const unsigned char *s = src;
+    if (d < s) {
+        for (size_t i = 0; i < n; i++)
+            d[i] = s[i];
+    } else if (d > s) {
+        for (size_t i = n; i > 0; i--)
+            d[i - 1] = s[i - 1];
+    }
+    return dst;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        char *buf = lc_read_str();
+        int d = lc_read_int(), s = lc_read_int(), n = lc_read_int();
+        int len = (int)strlen(buf);
+        long long before;
+        void *ret;
+        if (n < 0 || d < 0 || s < 0 || d + n > len || s + n > len)
+            lc_abort_case("Invalid test case", "Both ranges must lie inside buf.");
+        before = lc_alloc_count();
+        ret = myMemmove(buf + d, buf + s, (size_t)n);
+        if (ret != buf + d) lc_fail("myMemmove must return dst.");
+        if (lc_alloc_count() != before) lc_fail("myMemmove allocated memory. Copy in the right direction instead of using a temporary buffer.");
+        lc_out_str(buf);
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+"abcdef"
+0
+0
+6
+
+"abcdef"
+1
+0
+5
+
+"abcdef"
+0
+1
+5
+
+"0123456789"
+3
+4
+0
+
+"0123456789"
+5
+0
+5
+
+"0123456789"
+0
+5
+5
+
+"overlapping regions are tricky"
+4
+0
+20
+
+"overlapping regions are tricky"
+0
+4
+20
+@@ editorial
+## Approach: pick the copy direction
+
+```c
+void *myMemmove(void *dst, const void *src, size_t n) {
+    unsigned char *d = dst;
+    const unsigned char *s = src;
+    if (d < s) {                          // destination first: copy forward
+        for (size_t i = 0; i < n; i++)
+            d[i] = s[i];
+    } else if (d > s) {                   // destination later: copy backward
+        for (size_t i = n; i > 0; i--)
+            d[i - 1] = s[i - 1];
+    }
+    return dst;
+}
+```
+
+### Why direction matters
+With `buf = "abcdefgh"`, `dst = buf + 2`, `src = buf`, copying forward writes `a` over `c` before `c` has been read, giving `"abababah"`. Copying backward reads every byte before it can be overwritten.
+
+### The backward loop
+`for (size_t i = n; i > 0; i--)` with `d[i - 1]` avoids the classic unsigned trap: `for (size_t i = n - 1; i >= 0; i--)` never ends, because a `size_t` is always `>= 0` (and when `n == 0`, `n - 1` wraps around to a huge number).
+
+### memcpy vs memmove
+`memcpy` may assume the regions don't overlap and copy in whatever order is fastest, so `memcpy` on overlapping regions is undefined behavior. When in doubt, use `memmove`.
+
+**Complexity:** O(n) time, O(1) extra memory.

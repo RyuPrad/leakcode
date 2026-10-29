@@ -1,0 +1,779 @@
+@@@ section
+{"id": "lists", "title": "Linked Lists", "summary": "Nodes on the heap connected by pointers: build them, rewire them in place, and free exactly the nodes you remove."}
+
+@@@ problem build-and-free-a-list
+@@ meta
+{
+  "title": "Build and Free a Linked List",
+  "difficulty": "Easy",
+  "topics": ["Linked list", "malloc", "free"],
+  "params": [{"name": "vals", "type": "int[]"}],
+  "examples": [
+    {"input": ["[1,2,3]"], "output": "[1,2,3]", "explanation": "buildList creates 1 -> 2 -> 3 -> NULL. The harness prints it, then calls your freeList and checks that all 3 nodes were freed."},
+    {"input": ["[]"], "output": "[]", "explanation": "An empty list is just NULL."}
+  ],
+  "hints": [
+    "Keep a pointer to the last node (or to the last node's next field) so you can append in O(1).",
+    "Every node must have next set: the last one gets NULL.",
+    "In freeList, save node->next in a variable before you free the node."
+  ],
+  "constraints": ["0 <= n <= 5000"],
+  "memory": "`buildList` allocates one node per value. `freeList` must free every node, and must not touch a node after freeing it."
+}
+@@ description
+A **singly linked list** is a chain of separately allocated nodes. Each node stores a value and a pointer to the next node; the last node points to `NULL`.
+
+```c
+struct ListNode {
+    int val;
+    struct ListNode *next;
+};
+
+struct ListNode *buildList(const int *vals, int n);   // vals[0] becomes the head
+void freeList(struct ListNode *head);
+```
+
+Write both halves of the life cycle. `buildList` turns an array into a list, keeping the order. `freeList` releases every node.
+
+The trap in `freeList` is so common it has its own *Bug hunt* later: once a node is freed, you can no longer read its `next` field.
+@@ prelude
+struct ListNode {
+    int val;
+    struct ListNode *next;
+};
+struct ListNode *buildList(const int *vals, int n);
+void freeList(struct ListNode *head);
+@@ starter
+#include <stdlib.h>
+
+/* Provided by the harness:
+ * struct ListNode {
+ *     int val;
+ *     struct ListNode *next;
+ * };
+ */
+
+struct ListNode *buildList(const int *vals, int n) {
+    // TODO: allocate one node per value, in order.
+    return NULL;
+}
+
+void freeList(struct ListNode *head) {
+    // TODO: free every node.
+}
+@@ solution
+#include <stdlib.h>
+
+struct ListNode *buildList(const int *vals, int n) {
+    struct ListNode *head = NULL;
+    struct ListNode **tail = &head;          /* where the next node gets linked */
+    for (int i = 0; i < n; i++) {
+        struct ListNode *node = malloc(sizeof *node);
+        if (node == NULL) break;
+        node->val = vals[i];
+        node->next = NULL;
+        *tail = node;
+        tail = &node->next;
+    }
+    return head;
+}
+
+void freeList(struct ListNode *head) {
+    while (head != NULL) {
+        struct ListNode *next = head->next;  /* read before freeing */
+        free(head);
+        head = next;
+    }
+}
+@@ driver
+#include "lc_driver.h"
+#define LC_WANT_LIST
+#include "lc_ds.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int n;
+        int *vals = lc_read_int_array(&n);
+        struct ListNode *head;
+        lc_make_readonly(vals);
+        head = buildList(vals, n);
+        lc_out_list(head);
+        freeList(head);
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[42]
+
+[5,4,3,2,1,0]
+
+[-1,-1,-1]
+
+[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]
+@@ editorial
+## Approach: append through a pointer-to-pointer
+
+```c
+struct ListNode *buildList(const int *vals, int n) {
+    struct ListNode *head = NULL;
+    struct ListNode **tail = &head;     // the link to fill next
+    for (int i = 0; i < n; i++) {
+        struct ListNode *node = malloc(sizeof *node);
+        if (node == NULL) break;
+        node->val = vals[i];
+        node->next = NULL;
+        *tail = node;                   // link it in
+        tail = &node->next;             // next time, fill this node's next
+    }
+    return head;
+}
+```
+
+`tail` points at the `next` field that should receive the new node: first `head` itself, then the previous node's `next`. That removes the usual "is this the first node?" special case.
+
+## Freeing: save next first
+
+```c
+void freeList(struct ListNode *head) {
+    while (head != NULL) {
+        struct ListNode *next = head->next;   // read before freeing
+        free(head);
+        head = next;
+    }
+}
+```
+
+After `free(head)`, the node's memory no longer belongs to you: `head->next` may already be garbage, and LeakCode reports any access as a use-after-free.
+
+**Complexity:** O(n) time; one allocation per node.
+
+@@@ problem reverse-linked-list
+@@ meta
+{
+  "title": "Reverse a Linked List",
+  "difficulty": "Easy",
+  "topics": ["Linked list", "In place", "Pointers"],
+  "params": [{"name": "head", "type": "list"}],
+  "examples": [
+    {"input": ["[1,2,3,4,5]"], "output": "[5,4,3,2,1]"},
+    {"input": ["[1,2]"], "output": "[2,1]"},
+    {"input": ["[]"], "output": "[]"}
+  ],
+  "hints": [
+    "Walk the list once, turning each next pointer around.",
+    "You need three pointers: prev, cur, and next (saved before you overwrite cur->next)."
+  ],
+  "constraints": ["0 <= number of nodes <= 5000"],
+  "memory": "Reverse **in place**: reuse the existing nodes. Allocating new nodes is reported as a failure."
+}
+@@ description
+Reverse the list and return its new head.
+
+```c
+struct ListNode *reverseList(struct ListNode *head);
+```
+
+The nodes already exist: you only need to change where their `next` pointers point. No node is created or destroyed, so the harness checks that you allocate nothing. It frees the returned list afterwards, which also proves that every node is still reachable.
+@@ prelude
+struct ListNode {
+    int val;
+    struct ListNode *next;
+};
+struct ListNode *reverseList(struct ListNode *head);
+@@ starter
+#include <stdlib.h>
+
+/* struct ListNode { int val; struct ListNode *next; }; */
+
+struct ListNode *reverseList(struct ListNode *head) {
+    // TODO
+    return head;
+}
+@@ solution
+#include <stdlib.h>
+
+struct ListNode *reverseList(struct ListNode *head) {
+    struct ListNode *prev = NULL;
+    while (head != NULL) {
+        struct ListNode *next = head->next;
+        head->next = prev;
+        prev = head;
+        head = next;
+    }
+    return prev;
+}
+@@ driver
+#include "lc_driver.h"
+#define LC_WANT_LIST
+#include "lc_ds.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        struct ListNode *head = lc_read_list(), *res;
+        long long before = lc_alloc_count();
+        res = reverseList(head);
+        if (lc_alloc_count() != before)
+            lc_fail("reverseList allocated %lld block(s). Reverse the list in place by re-pointing the next pointers.",
+                    lc_alloc_count() - before);
+        lc_out_list(res);
+        lc_free_list(res, "a node of the list returned by reverseList()");
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[7]
+
+[1,1,2,2,3]
+
+[10,20,30,40,50,60,70,80,90,100]
+
+[-5,0,5]
+@@ editorial
+## Approach: iterative, three pointers
+
+```c
+struct ListNode *reverseList(struct ListNode *head) {
+    struct ListNode *prev = NULL;
+    while (head != NULL) {
+        struct ListNode *next = head->next;   // remember the rest of the list
+        head->next = prev;                    // turn this node around
+        prev = head;
+        head = next;
+    }
+    return prev;                              // the old tail
+}
+```
+
+Draw it once on paper with three nodes: after each iteration, `prev` heads the already-reversed part and `head` heads the part still to do.
+
+### Recursive version
+```c
+struct ListNode *reverseList(struct ListNode *head) {
+    if (head == NULL || head->next == NULL) return head;
+    struct ListNode *rest = reverseList(head->next);
+    head->next->next = head;
+    head->next = NULL;
+    return rest;
+}
+```
+Elegant, but it uses one stack frame per node. For a list with a million nodes that is a stack overflow. Iteration uses O(1) memory.
+
+**Complexity:** O(n) time, O(1) extra memory.
+
+@@@ problem remove-linked-list-elements
+@@ meta
+{
+  "title": "Remove Linked List Elements",
+  "difficulty": "Easy",
+  "topics": ["Linked list", "free", "Ownership"],
+  "params": [{"name": "head", "type": "list"}, {"name": "val", "type": "int"}],
+  "examples": [
+    {"input": ["[1,2,6,3,4,5,6]", "6"], "output": "[1,2,3,4,5]", "explanation": "Both nodes holding 6 are unlinked and freed."},
+    {"input": ["[7,7,7,7]", "7"], "output": "[]", "explanation": "Every node is removed (and freed); the new head is NULL."}
+  ],
+  "hints": [
+    "Removing a node means two things: unlink it, and free it.",
+    "A dummy node (a local struct ListNode on the stack) whose next is head makes removing the first node a normal case.",
+    "Alternatively, walk with a pointer-to-pointer: struct ListNode **link = &head."
+  ],
+  "constraints": ["0 <= number of nodes <= 10^4"],
+  "memory": "Your function **owns** the nodes it unlinks: each removed node must be freed. The nodes that remain belong to the caller."
+}
+@@ description
+Remove every node whose value equals `val` and return the new head.
+
+```c
+struct ListNode *removeElements(struct ListNode *head, int val);
+```
+
+This is LeetCode's *Remove Linked List Elements*, with one difference that LeetCode doesn't check: **memory**. Unlinking a node from the list is not enough. Once nothing points to it, nobody else can free it. The harness frees only the nodes still in the returned list, so any node you unlinked but didn't free shows up as a leak.
+@@ prelude
+struct ListNode {
+    int val;
+    struct ListNode *next;
+};
+struct ListNode *removeElements(struct ListNode *head, int val);
+@@ starter
+#include <stdlib.h>
+
+/* struct ListNode { int val; struct ListNode *next; }; */
+
+struct ListNode *removeElements(struct ListNode *head, int val) {
+    // TODO: unlink AND free every node whose value is val.
+    return head;
+}
+@@ solution
+#include <stdlib.h>
+
+struct ListNode *removeElements(struct ListNode *head, int val) {
+    struct ListNode **link = &head;
+    while (*link != NULL) {
+        struct ListNode *node = *link;
+        if (node->val == val) {
+            *link = node->next;     /* unlink */
+            free(node);             /* and release */
+        } else {
+            link = &node->next;
+        }
+    }
+    return head;
+}
+@@ driver
+#include "lc_driver.h"
+#define LC_WANT_LIST
+#include "lc_ds.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        struct ListNode *head = lc_read_list(), *res;
+        int val = lc_read_int();
+        res = removeElements(head, val);
+        lc_out_list(res);
+        lc_free_list(res, "a node of the list returned by removeElements()");
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[]
+1
+
+[1,2,3]
+4
+
+[1,1,2,1]
+1
+
+[2,1,1,2]
+1
+
+[5,6,5,6,5,6]
+5
+@@ editorial
+## Approach: pointer-to-pointer walk
+
+```c
+struct ListNode *removeElements(struct ListNode *head, int val) {
+    struct ListNode **link = &head;           // the pointer that leads to *link
+    while (*link != NULL) {
+        struct ListNode *node = *link;
+        if (node->val == val) {
+            *link = node->next;               // bypass the node...
+            free(node);                       // ...and release it
+        } else {
+            link = &node->next;               // move to the next link
+        }
+    }
+    return head;
+}
+```
+
+`link` points at whichever pointer leads to the current node: `head` at first, then some node's `next`. Rewriting `*link` removes the node regardless of where it is, with no special case for the head.
+
+### Dummy-node alternative
+```c
+struct ListNode dummy = { 0, head };   // lives on the stack: nothing to free
+struct ListNode *prev = &dummy;
+while (prev->next) {
+    if (prev->next->val == val) {
+        struct ListNode *dead = prev->next;
+        prev->next = dead->next;
+        free(dead);
+    } else {
+        prev = prev->next;
+    }
+}
+return dummy.next;
+```
+
+### The ownership rule
+Whoever removes a node from a structure becomes responsible for it. Here nothing else could ever free it, so a removal without `free` is a guaranteed leak.
+
+**Complexity:** O(n) time, O(1) extra memory.
+
+@@@ problem merge-two-sorted-lists
+@@ meta
+{
+  "title": "Merge Two Sorted Lists",
+  "difficulty": "Easy",
+  "topics": ["Linked list", "Splicing", "In place"],
+  "params": [{"name": "list1", "type": "list"}, {"name": "list2", "type": "list"}],
+  "examples": [
+    {"input": ["[1,2,4]", "[1,3,4]"], "output": "[1,1,2,3,4,4]"},
+    {"input": ["[]", "[0]"], "output": "[0]"}
+  ],
+  "hints": [
+    "Repeatedly take the smaller head node and append it to the result.",
+    "Append by relinking the existing node, not by creating a new one.",
+    "When one list runs out, attach the rest of the other in one step."
+  ],
+  "constraints": ["0 <= length of each list <= 5000", "both lists are sorted in non-decreasing order"],
+  "memory": "Splice the existing nodes together: no allocation allowed. The harness frees the merged list, so every original node must appear in it exactly once."
+}
+@@ description
+Merge two sorted lists into one sorted list and return its head.
+
+```c
+struct ListNode *mergeTwoLists(struct ListNode *list1, struct ListNode *list2);
+```
+
+The merged list must be made by **splicing** together the nodes of the two input lists. Creating copies would double the memory and leave the originals to leak.
+@@ prelude
+struct ListNode {
+    int val;
+    struct ListNode *next;
+};
+struct ListNode *mergeTwoLists(struct ListNode *list1, struct ListNode *list2);
+@@ starter
+#include <stdlib.h>
+
+/* struct ListNode { int val; struct ListNode *next; }; */
+
+struct ListNode *mergeTwoLists(struct ListNode *list1, struct ListNode *list2) {
+    // TODO
+    return NULL;
+}
+@@ solution
+#include <stdlib.h>
+
+struct ListNode *mergeTwoLists(struct ListNode *list1, struct ListNode *list2) {
+    struct ListNode *head = NULL, **tail = &head;
+    while (list1 != NULL && list2 != NULL) {
+        struct ListNode **smaller = list1->val <= list2->val ? &list1 : &list2;
+        *tail = *smaller;
+        tail = &(*smaller)->next;
+        *smaller = (*smaller)->next;
+    }
+    *tail = list1 != NULL ? list1 : list2;
+    return head;
+}
+@@ driver
+#include "lc_driver.h"
+#define LC_WANT_LIST
+#include "lc_ds.h"
+
+static int count_nodes(struct ListNode *p)
+{
+    int n = 0;
+    for (; p; p = p->next) n++;
+    return n;
+}
+
+int main(void)
+{
+    while (lc_next_case()) {
+        struct ListNode *a = lc_read_list(), *b = lc_read_list(), *res;
+        int total = count_nodes(a) + count_nodes(b);
+        long long before = lc_alloc_count();
+        res = mergeTwoLists(a, b);
+        if (lc_alloc_count() != before)
+            lc_fail("mergeTwoLists allocated %lld block(s). Splice the existing nodes instead of copying them.",
+                    lc_alloc_count() - before);
+        lc_check_list_acyclic(res);
+        if (count_nodes(res) != total)
+            lc_fail("The merged list has %d nodes, but the two inputs had %d in total.", count_nodes(res), total);
+        lc_out_list(res);
+        lc_free_list(res, "a node of the list returned by mergeTwoLists()");
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[]
+[]
+
+[5]
+[1,2,3]
+
+[1,3,5,7]
+[2,4,6,8]
+
+[1,1,1]
+[1,1]
+
+[-10,0,10]
+[-5,5,15,25]
+@@ editorial
+## Approach: take the smaller head, splice it on
+
+```c
+struct ListNode *mergeTwoLists(struct ListNode *list1, struct ListNode *list2) {
+    struct ListNode *head = NULL, **tail = &head;
+    while (list1 != NULL && list2 != NULL) {
+        struct ListNode **smaller = list1->val <= list2->val ? &list1 : &list2;
+        *tail = *smaller;                 // link the node into the result
+        tail = &(*smaller)->next;         // the result's new last link
+        *smaller = (*smaller)->next;      // advance in that input list
+    }
+    *tail = list1 != NULL ? list1 : list2;   // attach the leftover
+    return head;
+}
+```
+
+The pointer-to-pointer `tail` from *Build and Free* appears again: it always points at the link where the next node goes.
+
+### Why `<=`?
+Taking from `list1` on ties keeps equal elements in their original order (a *stable* merge), which is what merge sort relies on.
+
+### Splicing vs copying
+Copying would allocate n new nodes, and the original nodes would have to be freed by someone: either a leak or extra work. Splicing is O(1) extra memory and preserves node identity, which matters when other code holds pointers to those nodes.
+
+**Complexity:** O(n + m) time, O(1) extra memory.
+
+@@@ problem remove-nth-node-from-end
+@@ meta
+{
+  "title": "Remove the N-th Node from the End",
+  "difficulty": "Medium",
+  "topics": ["Linked list", "Two pointers", "free"],
+  "params": [{"name": "head", "type": "list"}, {"name": "n", "type": "int"}],
+  "examples": [
+    {"input": ["[1,2,3,4,5]", "2"], "output": "[1,2,3,5]", "explanation": "The 2nd node from the end holds 4. It is unlinked and freed."},
+    {"input": ["[1]", "1"], "output": "[]"}
+  ],
+  "hints": [
+    "Move a lead pointer n nodes ahead, then move both pointers together until the lead reaches the end.",
+    "To delete a node you need the link that points to it: walk with a pointer-to-pointer, or use a dummy node.",
+    "Free the removed node."
+  ],
+  "constraints": ["1 <= number of nodes <= 5000", "1 <= n <= number of nodes"],
+  "memory": "Free the node you remove. Don't allocate anything else."
+}
+@@ description
+Remove the `n`-th node counted from the **end** of the list (the last node is the 1st from the end) and return the head.
+
+```c
+struct ListNode *removeNthFromEnd(struct ListNode *head, int n);
+```
+
+Try to do it in a single pass with two pointers. And as always in LeakCode: a removed node must be freed.
+@@ prelude
+struct ListNode {
+    int val;
+    struct ListNode *next;
+};
+struct ListNode *removeNthFromEnd(struct ListNode *head, int n);
+@@ starter
+#include <stdlib.h>
+
+/* struct ListNode { int val; struct ListNode *next; }; */
+
+struct ListNode *removeNthFromEnd(struct ListNode *head, int n) {
+    // TODO
+    return head;
+}
+@@ solution
+#include <stdlib.h>
+
+struct ListNode *removeNthFromEnd(struct ListNode *head, int n) {
+    struct ListNode *lead = head;
+    for (int i = 0; i < n; i++)
+        lead = lead->next;
+    struct ListNode **link = &head;     /* link to the node n behind lead */
+    while (lead != NULL) {
+        lead = lead->next;
+        link = &(*link)->next;
+    }
+    struct ListNode *victim = *link;
+    *link = victim->next;
+    free(victim);
+    return head;
+}
+@@ driver
+#include "lc_driver.h"
+#define LC_WANT_LIST
+#include "lc_ds.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        struct ListNode *head = lc_read_list(), *res, *p;
+        int n = lc_read_int(), len = 0;
+        long long before;
+        for (p = head; p; p = p->next) len++;
+        if (n < 1 || n > len) lc_abort_case("Invalid test case", "n must be between 1 and the list length.");
+        before = lc_alloc_count();
+        res = removeNthFromEnd(head, n);
+        if (lc_alloc_count() != before) lc_fail("removeNthFromEnd allocated memory; it only needs to relink and free.");
+        lc_out_list(res);
+        lc_free_list(res, "a node of the list returned by removeNthFromEnd()");
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[1,2]
+1
+
+[1,2]
+2
+
+[1,2,3,4,5]
+5
+
+[1,2,3,4,5]
+1
+
+[9,8,7,6,5,4,3,2,1]
+4
+@@ editorial
+## Approach: a lead pointer n steps ahead
+
+```c
+struct ListNode *removeNthFromEnd(struct ListNode *head, int n) {
+    struct ListNode *lead = head;
+    for (int i = 0; i < n; i++)
+        lead = lead->next;               // lead is n nodes ahead
+    struct ListNode **link = &head;      // link to the node that trails lead by n
+    while (lead != NULL) {
+        lead = lead->next;
+        link = &(*link)->next;
+    }
+    struct ListNode *victim = *link;     // the n-th from the end
+    *link = victim->next;
+    free(victim);
+    return head;
+}
+```
+
+When `lead` falls off the end, the trailing link points at the node exactly `n` from the end. Because we track the **link** (not the node), removing the head (`n == length`) needs no special case.
+
+**Complexity:** O(length) time, one pass, O(1) extra memory.
+
+@@@ problem deep-copy-a-list
+@@ meta
+{
+  "title": "Deep Copy a List",
+  "difficulty": "Medium",
+  "topics": ["Linked list", "malloc", "Deep copy"],
+  "params": [{"name": "head", "type": "list"}],
+  "examples": [
+    {"input": ["[1,2,3]"], "output": "[1,2,3]", "explanation": "The copy has the same values but three brand-new nodes. The harness frees both lists separately."},
+    {"input": ["[]"], "output": "[]"}
+  ],
+  "hints": [
+    "Allocate a new node for every node of the original.",
+    "Use the same tail-pointer technique as in Build and Free a Linked List.",
+    "The original is const: read it, never modify it."
+  ],
+  "constraints": ["0 <= number of nodes <= 5000"],
+  "memory": "Return a list made only of **new** nodes; the caller frees the copy and the original independently. No node may be shared between them."
+}
+@@ description
+Return a **deep copy** of the list: a new list with the same values, made of newly allocated nodes.
+
+```c
+struct ListNode *copyList(const struct ListNode *head);
+```
+
+A *shallow* copy (copying the head pointer, or reusing some nodes) looks equal when printed, but the two lists then share memory: modifying one changes the other, and freeing both frees the shared nodes twice. The harness checks that no node is shared, that the original is untouched, and frees both lists.
+@@ prelude
+struct ListNode {
+    int val;
+    struct ListNode *next;
+};
+struct ListNode *copyList(const struct ListNode *head);
+@@ starter
+#include <stdlib.h>
+
+/* struct ListNode { int val; struct ListNode *next; }; */
+
+struct ListNode *copyList(const struct ListNode *head) {
+    // TODO
+    return NULL;
+}
+@@ solution
+#include <stdlib.h>
+
+struct ListNode *copyList(const struct ListNode *head) {
+    struct ListNode *copy = NULL, **tail = &copy;
+    for (const struct ListNode *p = head; p != NULL; p = p->next) {
+        struct ListNode *node = malloc(sizeof *node);
+        if (node == NULL) break;
+        node->val = p->val;
+        node->next = NULL;
+        *tail = node;
+        tail = &node->next;
+    }
+    return copy;
+}
+@@ driver
+#include "lc_driver.h"
+#define LC_WANT_LIST
+#include "lc_ds.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        const LcJson *vals = lc_read_json();
+        struct ListNode *head = lc_list_from_json(vals), *copy, *p;
+        int n = lc_json_len(vals), i, shared = 0, intact = 1;
+        struct ListNode **orig = (struct ListNode **)lc_harness_alloc(sizeof(*orig) * (size_t)n);
+        for (i = 0, p = head; p; p = p->next) orig[i++] = p;
+        copy = copyList(head);
+        for (i = 0, p = head; i < n && p; i++, p = p->next)
+            if (p != orig[i] || p->val != lc_json_int(lc_json_at(vals, i))) intact = 0;
+        if (!intact || i != n || p != NULL) lc_abort_case("The original list was modified", "copyList must not change the list it copies (it is const).");
+        lc_check_list_acyclic(copy);
+        for (p = copy; p; p = p->next)
+            for (i = 0; i < n; i++)
+                if (p == orig[i]) shared = 1;
+        lc_out_list(copy);
+        if (shared) {
+            struct ListNode *next;
+            lc_fail("Your copy shares nodes with the original list. A deep copy must allocate a new node for every element.");
+            for (p = copy; p; p = next) {
+                int mine = 1;
+                next = p->next;
+                for (i = 0; i < n; i++)
+                    if (p == orig[i]) mine = 0;
+                if (mine) LC_FREE_RESULT(p, "a node of the list returned by copyList()");
+            }
+        } else {
+            lc_free_list(copy, "a node of the list returned by copyList()");
+        }
+        lc_free_list(head, "a node of the original list");
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[42]
+
+[3,1,4,1,5,9,2,6]
+
+[0,0,0,0]
+
+[-1,-2,-3,-4,-5,-6,-7,-8,-9,-10,-11,-12]
+@@ editorial
+## Approach: allocate and append
+
+```c
+struct ListNode *copyList(const struct ListNode *head) {
+    struct ListNode *copy = NULL, **tail = &copy;
+    for (const struct ListNode *p = head; p != NULL; p = p->next) {
+        struct ListNode *node = malloc(sizeof *node);
+        if (node == NULL) break;
+        node->val = p->val;          // copy the value, never the pointers
+        node->next = NULL;
+        *tail = node;
+        tail = &node->next;
+    }
+    return copy;
+}
+```
+
+### Shallow vs deep
+`struct ListNode *copy = head;` copies one pointer: both names now refer to the *same* nodes. A deep copy duplicates everything the structure owns. The rule of thumb: copy values, allocate new storage for anything reached through a pointer.
+
+The *Shallow Copy* bug hunt shows the classic consequence: two owners free the same memory.
+
+### `const struct ListNode *`
+The parameter promises not to modify the original. Inside the loop, `p` is also `const struct ListNode *`, so an accidental `p->val = 0` is a compile error.
+
+**Complexity:** O(n) time and memory.

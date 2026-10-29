@@ -1,0 +1,498 @@
+@@@ section
+{"id": "pointers", "title": "Pointer Basics", "summary": "Addresses, dereferencing, out-parameters and pointer arithmetic: the foundation of everything else in C."}
+
+@@@ problem swap-two-integers
+@@ meta
+{
+  "title": "Swap Two Integers",
+  "difficulty": "Easy",
+  "topics": ["Pointers", "Pass by reference"],
+  "params": [{"name": "a", "type": "int"}, {"name": "b", "type": "int"}],
+  "examples": [
+    {"input": ["3", "7"], "output": "[7,3]", "explanation": "After swap(&x, &y) the caller's x holds 7 and y holds 3."},
+    {"input": ["-5", "-5"], "output": "[-5,-5]"}
+  ],
+  "hints": [
+    "A C function always receives copies of its arguments. To change the caller's variables, it needs their addresses.",
+    "Inside swap, *a is the caller's first variable itself. Save its value in a temporary before you overwrite it."
+  ],
+  "constraints": ["-2^31 <= a, b <= 2^31 - 1"]
+}
+@@ description
+Write a function that swaps the values of two `int` variables that belong to the **caller**.
+
+```c
+void swap(int *a, int *b);
+```
+
+The test harness declares two local variables `x` and `y`, calls `swap(&x, &y)`, and prints `[x, y]`.
+
+C passes every argument **by value**: the function gets its own copy. A `void swap(int a, int b)` would only swap its private copies, and the caller would never notice. Passing **pointers** gives the function the *addresses* of the caller's variables, and the dereference `*a` reads or writes the variable stored at that address.
+@@ prelude
+void swap(int *a, int *b);
+@@ starter
+#include <stdio.h>
+
+void swap(int *a, int *b) {
+    // TODO: exchange the values that a and b point to.
+}
+@@ solution
+void swap(int *a, int *b) {
+    int tmp = *a;
+    *a = *b;
+    *b = tmp;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int x = lc_read_int();
+        int y = lc_read_int();
+        swap(&x, &y);
+        lc_out_begin();
+        lc_out_int(x);
+        lc_out_int(y);
+        lc_out_end();
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+0
+0
+
+2147483647
+-2147483648
+
+1
+2
+
+-100
+42
+
+123456
+-654321
+@@ editorial
+## Approach: a temporary variable
+
+`*a` *is* the caller's first variable and `*b` the second. Writing `*a = *b` first would destroy the old value of `*a`, so save it in a temporary:
+
+```c
+void swap(int *a, int *b) {
+    int tmp = *a;   // read the caller's first variable
+    *a = *b;        // copy the second into the first
+    *b = tmp;       // copy the saved value into the second
+}
+```
+
+### Why pointers?
+`swap(&x, &y)` passes the *addresses* of `x` and `y`. The parameters `a` and `b` are still copies, but copies of addresses: both the caller and `swap` can reach the same two variables through them.
+
+### Common mistakes
+- **Swapping the pointers** (`int *t = a; a = b; b = t;`) only swaps the function's local copies of the addresses. The caller's variables do not change.
+- **Forgetting the `*`**: `a = b` copies an address, not a value.
+
+**Complexity:** O(1) time, O(1) extra memory.
+
+@@@ problem min-and-max
+@@ meta
+{
+  "title": "Min and Max via Out-Parameters",
+  "difficulty": "Easy",
+  "topics": ["Pointers", "Arrays", "Out-parameters"],
+  "params": [{"name": "nums", "type": "int[]"}],
+  "examples": [
+    {"input": ["[3,1,4,1,5,9,2,6]"], "output": "[1,9]", "explanation": "The smallest value is 1 and the largest is 9."},
+    {"input": ["[-7]"], "output": "[-7,-7]", "explanation": "With one element, it is both the minimum and the maximum."}
+  ],
+  "hints": [
+    "Start both answers at nums[0], then look at every other element once.",
+    "Write the results through the pointers at the end: *outMin = ..., *outMax = ..."
+  ],
+  "constraints": ["1 <= numsSize <= 10^4", "-2^31 <= nums[i] <= 2^31 - 1"]
+}
+@@ description
+A C function can return only one value. A common way to return more is through **out-parameters**: the caller passes the addresses of its own variables and the function writes the results there.
+
+Find both the smallest and the largest element of `nums` in a single pass, and store them in `*outMin` and `*outMax`.
+
+```c
+void minMax(const int *nums, int numsSize, int *outMin, int *outMax);
+```
+
+`nums` is declared `const int *`: your function may read the array but must not modify it. The harness makes the array read-only, so any write to it is reported.
+@@ prelude
+void minMax(const int *nums, int numsSize, int *outMin, int *outMax);
+@@ starter
+void minMax(const int *nums, int numsSize, int *outMin, int *outMax) {
+    // TODO: scan nums once and write the results through outMin and outMax.
+}
+@@ solution
+void minMax(const int *nums, int numsSize, int *outMin, int *outMax) {
+    int lo = nums[0], hi = nums[0];
+    for (int i = 1; i < numsSize; i++) {
+        if (nums[i] < lo) lo = nums[i];
+        if (nums[i] > hi) hi = nums[i];
+    }
+    *outMin = lo;
+    *outMax = hi;
+}
+@@ driver
+#include "lc_driver.h"
+#include <limits.h>
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int n;
+        int *nums = lc_read_int_array(&n);
+        int lo = INT_MIN + 12345, hi = INT_MAX - 12345;
+        lc_make_readonly(nums);
+        minMax(nums, n, &lo, &hi);
+        lc_out_begin();
+        lc_out_int(lo);
+        lc_out_int(hi);
+        lc_out_end();
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[5,4,3,2,1]
+
+[0,0,0]
+
+[2147483647,-2147483648,0]
+
+[-1,-2,-3,-4]
+
+[10,20]
+
+[20,10]
+
+[1,2,3,4,5,6,7,8,9,10,-10,9,8,7,6,5,4,3,2,1]
+@@ editorial
+## Approach: one pass, two running answers
+
+Keep the best minimum and maximum seen so far, starting from the first element, and update both while scanning:
+
+```c
+void minMax(const int *nums, int numsSize, int *outMin, int *outMax) {
+    int lo = nums[0], hi = nums[0];
+    for (int i = 1; i < numsSize; i++) {
+        if (nums[i] < lo) lo = nums[i];
+        if (nums[i] > hi) hi = nums[i];
+    }
+    *outMin = lo;   // write the results into the caller's variables
+    *outMax = hi;
+}
+```
+
+### Why start from `nums[0]`?
+Starting from `0` is wrong when every value is negative (the min) or positive (the max). Starting from `INT_MAX`/`INT_MIN` works too, but `nums[0]` is always a real candidate.
+
+### Out-parameters in the standard library
+`strtol(str, &end, 10)` returns the number *and* writes where parsing stopped into `end`; `scanf` writes every value it reads through pointers. Same pattern.
+
+**Complexity:** O(n) time, O(1) extra memory.
+
+@@@ problem sum-with-pointer-arithmetic
+@@ meta
+{
+  "title": "Sum a Range with Pointer Arithmetic",
+  "difficulty": "Easy",
+  "topics": ["Pointers", "Pointer arithmetic", "Arrays"],
+  "params": [{"name": "nums", "type": "int[]"}],
+  "examples": [
+    {"input": ["[1,2,3,4]"], "output": "10", "explanation": "The harness calls sumRange(nums, nums + 4)."},
+    {"input": ["[2147483647,2147483647]"], "output": "4294967294", "explanation": "The sum does not fit in an int, so accumulate in a long long."},
+    {"input": ["[]"], "output": "0", "explanation": "begin == end: the range is empty."}
+  ],
+  "hints": [
+    "Loop with a pointer: for (const int *p = begin; p != end; p++).",
+    "end points one past the last element. Never dereference it.",
+    "Use a long long accumulator: adding two big ints overflows an int."
+  ],
+  "constraints": ["0 <= numsSize <= 10^5", "-2^31 <= nums[i] <= 2^31 - 1"]
+}
+@@ description
+Many C APIs describe an array by a **half-open range** of two pointers: `begin` points at the first element and `end` points **one past** the last one. The range is empty when `begin == end`.
+
+Return the sum of all integers in `[begin, end)`.
+
+```c
+long long sumRange(const int *begin, const int *end);
+```
+
+Iterate with a pointer instead of an index: `p++` moves `p` forward by **one element** (`sizeof(int)` bytes), not by one byte.
+
+> **Memory check:** the harness places the array so that it ends exactly at the end of its block. Reading `*end`, the element "one past the end", is reported as a heap buffer overflow.
+@@ prelude
+long long sumRange(const int *begin, const int *end);
+@@ starter
+long long sumRange(const int *begin, const int *end) {
+    long long sum = 0;
+    // TODO: walk a pointer from begin up to (but not including) end.
+    return sum;
+}
+@@ solution
+long long sumRange(const int *begin, const int *end) {
+    long long sum = 0;
+    for (const int *p = begin; p != end; p++)
+        sum += *p;
+    return sum;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int n;
+        int *nums = lc_read_int_array(&n);
+        lc_make_readonly(nums);
+        lc_out_int(sumRange(nums, nums + n));
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[7]
+
+[-1,-2,-3]
+
+[-2147483648,-2147483648,-2147483648]
+
+[5,-5,5,-5,5]
+
+[1000000,1000000,1000000,1000000,1000000,1000000,1000000,1000000,1000000,1000000]
+
+[0,0,0,0,1]
+@@ editorial
+## Approach: walk a pointer
+
+```c
+long long sumRange(const int *begin, const int *end) {
+    long long sum = 0;
+    for (const int *p = begin; p != end; p++)
+        sum += *p;
+    return sum;
+}
+```
+
+### Pointer arithmetic
+`p + 1` is the address of the *next element*: C scales the `+ 1` by `sizeof(*p)`. For an `int *`, `p + 1` is 4 bytes further. `end - begin` gives the number of **elements** between two pointers, not the number of bytes.
+
+`nums[i]` is defined as `*(nums + i)`; indexing is pointer arithmetic in disguise.
+
+### Why one past the end?
+A half-open range makes the empty range natural (`begin == end`) and lets the loop condition be `p != end`. C guarantees that the address one past the end of an array is valid to *compute* and *compare*, but it is not valid to *dereference*.
+
+### Overflow
+Two `int`s can sum to more than `INT_MAX`. `sum` is a `long long`, and `sum += *p` converts each element before adding, so no intermediate result overflows.
+
+**Complexity:** O(n) time, O(1) extra memory.
+
+@@@ problem reverse-array-in-place
+@@ meta
+{
+  "title": "Reverse an Array In Place",
+  "difficulty": "Easy",
+  "topics": ["Pointers", "Two pointers", "Arrays"],
+  "params": [{"name": "nums", "type": "int[]"}],
+  "examples": [
+    {"input": ["[1,2,3,4,5]"], "output": "[5,4,3,2,1]"},
+    {"input": ["[8,9]"], "output": "[9,8]"},
+    {"input": ["[]"], "output": "[]"}
+  ],
+  "hints": [
+    "Use two pointers: one at the first element, one at the last.",
+    "Swap what they point to, then move them toward each other until they meet.",
+    "For an empty array, nums + numsSize - 1 points before the array: check numsSize first."
+  ],
+  "constraints": ["0 <= numsSize <= 10^5"]
+}
+@@ description
+Reverse the array `nums` **in place**: modify the caller's array directly, without allocating a second one.
+
+```c
+void reverseArray(int *nums, int numsSize);
+```
+
+The harness prints `nums` after your function returns.
+@@ prelude
+void reverseArray(int *nums, int numsSize);
+@@ starter
+void reverseArray(int *nums, int numsSize) {
+    // TODO: swap elements from both ends, moving toward the middle.
+}
+@@ solution
+void reverseArray(int *nums, int numsSize) {
+    if (numsSize < 2) return;
+    int *lo = nums, *hi = nums + numsSize - 1;
+    while (lo < hi) {
+        int tmp = *lo;
+        *lo++ = *hi;
+        *hi-- = tmp;
+    }
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int n;
+        int *nums = lc_read_int_array(&n);
+        long long before = lc_alloc_count();
+        reverseArray(nums, n);
+        if (lc_alloc_count() != before)
+            lc_fail("reverseArray allocated memory. Reverse the array in place by swapping elements.");
+        lc_out_int_array(nums, n);
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[1]
+
+[1,2,3,4]
+
+[0,-1,-2,-3,-4,-5,-6]
+
+[5,5,5,5]
+
+[2147483647,-2147483648]
+@@ editorial
+## Approach: two pointers
+
+```c
+void reverseArray(int *nums, int numsSize) {
+    if (numsSize < 2) return;
+    int *lo = nums, *hi = nums + numsSize - 1;
+    while (lo < hi) {
+        int tmp = *lo;
+        *lo++ = *hi;    // write, then advance lo
+        *hi-- = tmp;    // write, then move hi back
+    }
+}
+```
+
+`*lo++ = x` stores `x` at `lo` and then advances `lo`: the postfix `++` applies to the pointer, not to the value it points to.
+
+### Edge cases
+For `numsSize == 0`, `nums + numsSize - 1` would point *before* the array, which is undefined even without dereferencing it. The early return avoids computing it.
+
+### Pointer comparison
+`lo < hi` is meaningful because both pointers point into the same array. Comparing pointers into *different* objects with `<` is undefined behavior.
+
+**Complexity:** O(n) time, O(1) extra memory.
+
+@@@ problem find-the-first-match
+@@ meta
+{
+  "title": "Find the First Match",
+  "difficulty": "Easy",
+  "topics": ["Pointers", "NULL", "Arrays"],
+  "params": [{"name": "nums", "type": "int[]"}, {"name": "target", "type": "int"}],
+  "examples": [
+    {"input": ["[4,8,15,16,23,42]", "16"], "output": "3", "explanation": "findFirst returns &nums[3]; the harness prints its index (p - nums)."},
+    {"input": ["[1,2,1]", "1"], "output": "0", "explanation": "Return the first match."},
+    {"input": ["[1,2,3]", "7"], "output": "-1", "explanation": "No match: return NULL (printed as -1)."}
+  ],
+  "hints": [
+    "&nums[i] and nums + i are the same pointer.",
+    "NULL is the conventional \"nothing found\" pointer. Return it after the loop."
+  ],
+  "constraints": ["0 <= numsSize <= 10^4"]
+}
+@@ description
+Return a **pointer to the first element** of `nums` equal to `target`, or `NULL` if there is none.
+
+```c
+int *findFirst(int *nums, int numsSize, int target);
+```
+
+Returning a pointer *into* the caller's array, instead of an index, lets the caller read or update the element directly: `int *p = findFirst(a, n, 7); if (p) *p = 0;`
+
+The harness prints `p - nums` (the element's index), or `-1` when you return `NULL`. It also checks that the pointer you return really points into `nums`.
+@@ prelude
+int *findFirst(int *nums, int numsSize, int target);
+@@ starter
+#include <stddef.h>
+
+int *findFirst(int *nums, int numsSize, int target) {
+    // TODO: return a pointer to the first element equal to target, or NULL.
+    return NULL;
+}
+@@ solution
+#include <stddef.h>
+
+int *findFirst(int *nums, int numsSize, int target) {
+    for (int *p = nums; p < nums + numsSize; p++)
+        if (*p == target)
+            return p;
+    return NULL;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int n;
+        int *nums = lc_read_int_array(&n);
+        int target = lc_read_int();
+        int *p = findFirst(nums, n, target);
+        if (!p) {
+            lc_out_int(-1);
+        } else if (p < nums || p >= nums + n) {
+            lc_fail("findFirst returned a pointer that does not point into nums.");
+            lc_out_null();
+        } else {
+            if (*p != target) lc_fail("The returned pointer points at %d, not at the target %d.", *p, target);
+            lc_out_int((long long)(p - nums));
+        }
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[]
+5
+
+[5]
+5
+
+[5]
+6
+
+[3,3,3,3]
+3
+
+[9,8,7,6,5,4,3,2,1,0]
+0
+
+[-1,-2,-3,-2]
+-2
+@@ editorial
+## Approach: scan and return the address
+
+```c
+int *findFirst(int *nums, int numsSize, int target) {
+    for (int *p = nums; p < nums + numsSize; p++)
+        if (*p == target)
+            return p;     // a pointer into the caller's array
+    return NULL;          // "not found"
+}
+```
+
+### Is returning a pointer safe here?
+Yes: the pointer points into the **caller's** array, which outlives this function. Returning the address of one of *your own local variables* would not be: it disappears when the function returns (see the *Dangling Pointer* bug hunt later).
+
+### NULL
+`NULL` is a pointer value guaranteed not to point at any object. The caller must check for it before dereferencing: `*findFirst(...)` crashes with a NULL dereference when nothing matches.
+
+**Complexity:** O(n) time, O(1) extra memory.

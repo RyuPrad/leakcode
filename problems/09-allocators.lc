@@ -1,0 +1,1629 @@
+@@@ section
+{"id": "allocators", "title": "Allocators & Data Structures", "summary": "Become the allocator: arenas, pools, reference counting, ownership-heavy data structures, and finally your own malloc."}
+
+@@@ problem bump-allocator
+@@ meta
+{
+  "title": "Bump Allocator (Arena)",
+  "difficulty": "Medium",
+  "topics": ["Allocators", "Alignment", "Pointer arithmetic"],
+  "kind": "design",
+  "params": [{"name": "capacity", "type": "int"}, {"name": "operations", "type": "string[]"}, {"name": "arguments", "type": "any[][]"}],
+  "examples": [
+    {"input": ["64", "[\"alloc\",\"alloc\",\"alloc\",\"alloc\",\"alloc\",\"alloc\",\"used\",\"reset\",\"alloc\",\"used\"]", "[[1,1],[4,4],[8,8],[1,1],[16,16],[32,1],[],[],[64,64],[]]"], "output": "[0,4,8,16,32,null,48,null,0,64]", "explanation": "Each alloc prints the offset of the returned pointer from the buffer start. alloc(4,4) skips bytes 1-3 to reach a multiple of 4. alloc(32,1) needs bytes 48..79 but only 64 exist, so it returns NULL. reset makes the whole buffer available again."}
+  ],
+  "hints": [
+    "Round the current address up to a multiple of align: (addr + align - 1) & ~(align - 1) works because align is a power of two.",
+    "Align the address (base + used), not just the offset.",
+    "Check that the request fits before committing: offset + size must not exceed capacity. Beware of overflow in that sum."
+  ],
+  "constraints": ["capacity is a multiple of 64, at most 4096", "align is a power of two, 1 <= align <= 64", "1 <= size <= 10^6"],
+  "memory": "The arena never calls `malloc`: it hands out pieces of the buffer it was given. Individual allocations are never freed; `arenaReset` releases all of them at once."
+}
+@@ description
+An **arena** (or *bump allocator*) is the simplest and fastest allocator there is. It owns one big buffer and a counter of how much is used. Allocating means rounding the counter up for alignment, then "bumping" it by the requested size. There is no per-object `free`: everything is released at once with a reset. Compilers, games and servers use arenas for data that lives and dies together (one frame, one request, one compilation unit).
+
+```c
+typedef struct Arena {
+    unsigned char *base;   // start of the buffer
+    size_t capacity;       // its size in bytes
+    size_t used;           // offset just past the last allocation
+} Arena;
+
+void  arenaInit(Arena *a, void *buffer, size_t capacity);
+void *arenaAlloc(Arena *a, size_t size, size_t align);   // NULL if it doesn't fit
+void  arenaReset(Arena *a);
+```
+
+`arenaAlloc` returns a pointer aligned to `align` bytes (a power of two), or `NULL` if the aligned block would not fit. Afterwards, `used` is the offset just past the new block.
+
+The harness prints each allocation as an **offset** from the start of the buffer, and `used` for the `used` operation. It also writes to every block you return, to check that blocks stay inside the buffer and never overlap.
+@@ prelude
+#include <stddef.h>
+typedef struct Arena {
+    unsigned char *base;
+    size_t capacity;
+    size_t used;
+} Arena;
+void  arenaInit(Arena *a, void *buffer, size_t capacity);
+void *arenaAlloc(Arena *a, size_t size, size_t align);
+void  arenaReset(Arena *a);
+@@ starter
+#include <stddef.h>
+#include <stdint.h>
+
+/* typedef struct Arena { unsigned char *base; size_t capacity; size_t used; } Arena; */
+
+void arenaInit(Arena *a, void *buffer, size_t capacity) {
+    // TODO
+}
+
+void *arenaAlloc(Arena *a, size_t size, size_t align) {
+    // TODO: align, check that it fits, bump.
+    return NULL;
+}
+
+void arenaReset(Arena *a) {
+    // TODO
+}
+@@ solution
+#include <stddef.h>
+#include <stdint.h>
+
+void arenaInit(Arena *a, void *buffer, size_t capacity) {
+    a->base = buffer;
+    a->capacity = capacity;
+    a->used = 0;
+}
+
+void *arenaAlloc(Arena *a, size_t size, size_t align) {
+    uintptr_t start = (uintptr_t)a->base + a->used;
+    uintptr_t aligned = (start + (align - 1)) & ~(uintptr_t)(align - 1);
+    size_t offset = (size_t)(aligned - (uintptr_t)a->base);
+    if (offset > a->capacity || size > a->capacity - offset)
+        return NULL;
+    a->used = offset + size;
+    return a->base + offset;
+}
+
+void arenaReset(Arena *a) {
+    a->used = 0;
+}
+@@ driver
+#include "lc_driver.h"
+#include <stdint.h>
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int cap = lc_read_int();
+        const LcJson *ops = lc_read_json(), *args = lc_read_json();
+        int n = lc_json_len(ops), i, j, live = 0;
+        unsigned char *buf;
+        unsigned char **starts;
+        size_t *sizes;
+        long long before;
+        Arena a;
+        if (cap <= 0 || cap % 64 != 0 || cap > 4096) lc_abort_case("Invalid test case", "capacity must be a positive multiple of 64, at most 4096.");
+        if (lc_json_len(args) != n) lc_abort_case("Invalid test case", "operations and arguments must have the same length.");
+        buf = (unsigned char *)lc_harness_alloc((size_t)cap);
+        starts = (unsigned char **)lc_harness_alloc(sizeof(*starts) * (size_t)(n + 1));
+        sizes = (size_t *)lc_harness_alloc(sizeof(*sizes) * (size_t)(n + 1));
+        memset(&a, 0xCD, sizeof a);
+        before = lc_alloc_count();
+        arenaInit(&a, buf, (size_t)cap);
+        lc_out_begin();
+        for (i = 0; i < n; i++) {
+            const char *op = lc_json_str(lc_json_at(ops, i));
+            const LcJson *arg = lc_json_at(args, i);
+            if (strcmp(op, "alloc") == 0) {
+                size_t size = (size_t)lc_json_ll(lc_json_at(arg, 0)), align = (size_t)lc_json_ll(lc_json_at(arg, 1));
+                unsigned char *p = (unsigned char *)arenaAlloc(&a, size, align);
+                if (!p) {
+                    lc_out_null();
+                    continue;
+                }
+                if (p < buf || p + size > buf + cap) {
+                    lc_fail("arenaAlloc(%zu, %zu) returned a block that does not lie inside the buffer.", size, align);
+                    lc_out_null();
+                    continue;
+                }
+                if ((uintptr_t)p % align != 0) lc_fail("arenaAlloc(%zu, %zu) returned an address that is not a multiple of %zu.", size, align, align);
+                for (j = 0; j < live; j++)
+                    if (p < starts[j] + sizes[j] && starts[j] < p + size)
+                        lc_fail("arenaAlloc(%zu, %zu) returned a block that overlaps a previous allocation.", size, align);
+                memset(p, 0x5A, size);
+                starts[live] = p;
+                sizes[live] = size;
+                live++;
+                lc_out_int((long long)(p - buf));
+            } else if (strcmp(op, "reset") == 0) {
+                arenaReset(&a);
+                live = 0;
+                lc_out_null();
+            } else if (strcmp(op, "used") == 0) {
+                lc_out_int((long long)a.used);
+            } else {
+                lc_abort_case("Invalid test case", "Unknown operation \"%s\".", op);
+            }
+        }
+        lc_out_end();
+        if (lc_alloc_count() != before) lc_fail("The arena called malloc. It must hand out pieces of the buffer it was given.");
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+128
+["alloc","alloc","alloc","alloc","alloc","used"]
+[[10,1],[10,1],[1,64],[63,1],[1,1],[]]
+
+64
+["alloc","used","alloc","alloc"]
+[[100,1],[],[64,1],[1,1]]
+
+1024
+["alloc","alloc","alloc","alloc","alloc","alloc","alloc","alloc","used"]
+[[3,4],[3,4],[3,4],[3,4],[3,4],[8,8],[2,2],[16,16],[]]
+
+256
+["alloc","alloc","reset","used","alloc","alloc","alloc"]
+[[200,8],[100,8],[],[],[100,32],[100,32],[100,32]]
+
+4096
+["alloc","alloc","alloc","used"]
+[[1000000,1],[4095,1],[1,1],[]]
+@@ editorial
+## Approach: align, check, bump
+
+```c
+void *arenaAlloc(Arena *a, size_t size, size_t align) {
+    uintptr_t start = (uintptr_t)a->base + a->used;                     // first free byte
+    uintptr_t aligned = (start + (align - 1)) & ~(uintptr_t)(align - 1); // round up
+    size_t offset = (size_t)(aligned - (uintptr_t)a->base);
+    if (offset > a->capacity || size > a->capacity - offset)            // no overflow
+        return NULL;
+    a->used = offset + size;
+    return a->base + offset;
+}
+```
+
+### Why alignment?
+A `double` or `int64_t` should start at an address that is a multiple of 8, and SIMD types need 16 or more. Misaligned accesses are slower on x86 and can crash on other CPUs. `malloc` always returns memory aligned for any built-in type, and a custom allocator must offer the same guarantee.
+
+### The rounding trick
+For a power of two `align`, `align - 1` is a mask of the low bits (`8 - 1 = 0b111`). Adding it and clearing those bits rounds up to the next multiple. To round an *address*, convert it to `uintptr_t`, an integer type wide enough to hold a pointer.
+
+### The overflow-safe check
+`offset + size > capacity` can overflow when `size` is huge (try `size = SIZE_MAX`). `size > capacity - offset` cannot, once you know `offset <= capacity`.
+
+### Why arenas are great
+- O(1) allocation: a few arithmetic instructions.
+- No per-object bookkeeping, and no fragmentation.
+- Leak-proof by design: one reset frees everything.
+
+The trade-off is that you can't free an object on its own. Arenas fit data whose lifetimes end together.
+
+**Complexity:** O(1) per operation.
+
+@@@ problem reference-counted-strings
+@@ meta
+{
+  "title": "Reference-Counted Strings",
+  "difficulty": "Medium",
+  "topics": ["Ownership", "Reference counting", "Design"],
+  "kind": "design",
+  "params": [{"name": "operations", "type": "string[]"}, {"name": "arguments", "type": "any[][]"}],
+  "examples": [
+    {"input": ["[\"new\",\"count\",\"retain\",\"count\",\"release\",\"get\",\"count\",\"release\"]", "[[\"hello\"],[0],[0],[0],[0],[0],[0],[0]]"], "output": "[0,1,null,2,null,\"hello\",1,null]", "explanation": "new creates object #0 with count 1. retain brings it to 2. The first release drops it to 1 (still alive); the second drops it to 0, which must free it."}
+  ],
+  "hints": [
+    "Store the count and the characters together: struct RcStr { int refs; char *text; } or a flexible array member char text[].",
+    "rcNew must copy s: the caller's string goes away right after the call.",
+    "rcRelease decrements the count and frees everything when it reaches zero, not before."
+  ],
+  "constraints": ["Operations only use objects that are still alive", "Every test ends with all objects released"],
+  "memory": "An object is freed exactly when its count drops to 0. Freeing too early is a use-after-free for the remaining owners; not freeing at 0 is a leak."
+}
+@@ description
+**Reference counting** lets several parts of a program share one object without agreeing on who frees it: every owner calls *retain* when it starts using the object and *release* when it is done. The last release frees it. Objective-C, Swift, Python (`Py_INCREF`), COM and C++'s `shared_ptr` all work this way.
+
+```c
+typedef struct RcStr RcStr;     // you define it
+
+RcStr *rcNew(const char *s);        // new object holding a copy of s, count = 1
+RcStr *rcRetain(RcStr *r);          // count++, returns r
+void   rcRelease(RcStr *r);         // count--, frees everything at 0
+const char *rcGet(const RcStr *r);  // the string
+int    rcCount(const RcStr *r);     // the current count
+```
+
+The operations refer to objects by number: `new` prints the number of the object it created (0, 1, 2, ...), and the other operations take that number.
+@@ prelude
+typedef struct RcStr RcStr;
+RcStr *rcNew(const char *s);
+RcStr *rcRetain(RcStr *r);
+void   rcRelease(RcStr *r);
+const char *rcGet(const RcStr *r);
+int    rcCount(const RcStr *r);
+@@ starter
+#include <stdlib.h>
+#include <string.h>
+
+struct RcStr {
+    int refs;
+    char *text;
+};
+
+RcStr *rcNew(const char *s) {
+    // TODO
+    return NULL;
+}
+
+RcStr *rcRetain(RcStr *r) {
+    // TODO
+    return r;
+}
+
+void rcRelease(RcStr *r) {
+    // TODO
+}
+
+const char *rcGet(const RcStr *r) {
+    return r->text;
+}
+
+int rcCount(const RcStr *r) {
+    return r->refs;
+}
+@@ solution
+#include <stdlib.h>
+#include <string.h>
+
+struct RcStr {
+    int refs;
+    char text[];              /* flexible array member: the string lives in the same block */
+};
+
+RcStr *rcNew(const char *s) {
+    size_t n = strlen(s) + 1;
+    RcStr *r = malloc(sizeof *r + n);
+    if (r == NULL) return NULL;
+    r->refs = 1;
+    memcpy(r->text, s, n);
+    return r;
+}
+
+RcStr *rcRetain(RcStr *r) {
+    r->refs++;
+    return r;
+}
+
+void rcRelease(RcStr *r) {
+    if (r != NULL && --r->refs == 0)
+        free(r);
+}
+
+const char *rcGet(const RcStr *r) {
+    return r->text;
+}
+
+int rcCount(const RcStr *r) {
+    return r->refs;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        const LcJson *ops = lc_read_json(), *args = lc_read_json();
+        int n = lc_json_len(ops), i, made = 0;
+        RcStr **objs;
+        if (lc_json_len(args) != n) lc_abort_case("Invalid test case", "operations and arguments must have the same length.");
+        objs = (RcStr **)lc_harness_alloc(sizeof(*objs) * (size_t)(n + 1));
+        lc_out_begin();
+        for (i = 0; i < n; i++) {
+            const char *op = lc_json_str(lc_json_at(ops, i));
+            const LcJson *arg = lc_json_at(args, i);
+            if (strcmp(op, "new") == 0) {
+                char *s = lc_harness_str(lc_json_at(arg, 0));
+                lc_make_readonly(s);
+                objs[made] = rcNew(s);
+                lc_harness_release(s);
+                if (!objs[made]) lc_abort_case("rcNew returned NULL", "rcNew must return a new object.");
+                lc_out_int(made++);
+            } else {
+                int h = lc_json_int(lc_json_at(arg, 0));
+                if (h < 0 || h >= made) lc_abort_case("Invalid test case", "Unknown object %d.", h);
+                if (strcmp(op, "retain") == 0) {
+                    if (rcRetain(objs[h]) != objs[h]) lc_fail("rcRetain must return its argument.");
+                    lc_out_null();
+                } else if (strcmp(op, "release") == 0) {
+                    rcRelease(objs[h]);
+                    lc_out_null();
+                } else if (strcmp(op, "get") == 0) {
+                    lc_out_str(rcGet(objs[h]));
+                } else if (strcmp(op, "count") == 0) {
+                    lc_out_int(rcCount(objs[h]));
+                } else {
+                    lc_abort_case("Invalid test case", "Unknown operation \"%s\".", op);
+                }
+            }
+        }
+        lc_out_end();
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+["new","release"]
+[["x"],[0]]
+
+["new","new","retain","get","get","release","release","count","get","release"]
+[["first"],["second"],[1],[0],[1],[0],[1],[1],[1],[1]]
+
+["new","retain","retain","retain","count","release","release","release","count","get","release"]
+[["shared"],[0],[0],[0],[0],[0],[0],[0],[0],[0],[0]]
+
+["new","new","new","release","get","retain","release","get","release","release"]
+[["a"],["b"],[""],[0],[1],[2],[2],[2],[2],[1]]
+@@ editorial
+## Approach: the count travels with the data
+
+```c
+struct RcStr {
+    int refs;
+    char text[];              // flexible array member
+};
+
+RcStr *rcNew(const char *s) {
+    size_t n = strlen(s) + 1;
+    RcStr *r = malloc(sizeof *r + n);   // header and characters in ONE block
+    if (r == NULL) return NULL;
+    r->refs = 1;                        // the creator is the first owner
+    memcpy(r->text, s, n);
+    return r;
+}
+
+RcStr *rcRetain(RcStr *r) { r->refs++; return r; }
+
+void rcRelease(RcStr *r) {
+    if (r != NULL && --r->refs == 0)    // last owner gone
+        free(r);
+}
+```
+
+### Flexible array members
+`char text[];` as the last member declares an array whose size is chosen at `malloc` time. `sizeof(struct RcStr)` doesn't include it, so you allocate `sizeof *r + n`. One allocation instead of two means faster creation, one `free`, and better cache locality.
+
+### The rules owners must follow
+- Call `retain` **before** storing a pointer somewhere new, and `release` when dropping it.
+- Never use an object after your own `release`: even if the count was 2, the other owner may release it next.
+- Cycles (A holds B, B holds A) never reach zero: reference counting leaks them, which is why Swift has *weak* references.
+
+**Complexity:** O(1) per operation (plus O(length) for `rcNew`).
+
+@@@ problem hash-map-with-chaining
+@@ meta
+{
+  "title": "Hash Map with Chaining",
+  "difficulty": "Medium",
+  "topics": ["Hash table", "Linked list", "Ownership"],
+  "kind": "design",
+  "params": [{"name": "buckets", "type": "int"}, {"name": "operations", "type": "string[]"}, {"name": "arguments", "type": "any[][]"}],
+  "examples": [
+    {"input": ["8", "[\"put\",\"put\",\"get\",\"get\",\"put\",\"get\",\"size\",\"remove\",\"remove\",\"size\"]", "[[\"a\",1],[\"b\",2],[\"a\"],[\"c\"],[\"a\",10],[\"a\"],[],[\"b\"],[\"b\"],[]]"], "output": "[null,null,1,null,null,10,2,true,false,1]", "explanation": "get prints the value, or null when the key is missing. Putting an existing key replaces its value."}
+  ],
+  "hints": [
+    "An array of bucket pointers; each bucket is a linked list of entries {key copy, value, next}.",
+    "Hash the key (e.g. FNV-1a or djb2), then take it modulo the number of buckets.",
+    "Copy keys with strdup: the caller frees its string right after the call. Free the copy when the entry is removed."
+  ],
+  "constraints": ["1 <= buckets <= 1024", "keys are non-empty strings of at most 30 characters", "putRange [prefix, n] puts prefix0..prefix{n-1} with values 0..n-1", "sumRange [prefix, n] prints the sum of the values of prefix0..prefix{n-1} that exist"],
+  "memory": "The map owns copies of its keys. `hmRemove` frees the entry and its key; `hmFree` frees every entry, every key, the bucket array and the map."
+}
+@@ description
+Implement a string-to-int hash map using **separate chaining**: an array of buckets, where each bucket is a linked list of the entries whose keys hash to it.
+
+```c
+typedef struct HashMap HashMap;
+
+HashMap *hmCreate(int buckets);
+void hmPut(HashMap *m, const char *key, int value);       // insert or update
+bool hmGet(const HashMap *m, const char *key, int *out);  // true + *out if found
+bool hmRemove(HashMap *m, const char *key);               // true if it existed
+int  hmSize(const HashMap *m);
+void hmFree(HashMap *m);
+```
+
+This problem combines everything so far: arrays of pointers, linked lists, string copies and careful freeing. The memory rules are strict:
+
+- Keys are **borrowed**: the harness frees each key string as soon as your function returns. Store a copy.
+- Removing an entry must free both the entry and its key copy.
+- `hmFree` must release everything.
+
+The bucket count is fixed (no resizing needed). With 1 bucket every key collides, which is a good test of your chains.
+@@ prelude
+#include <stdbool.h>
+typedef struct HashMap HashMap;
+HashMap *hmCreate(int buckets);
+void hmPut(HashMap *m, const char *key, int value);
+bool hmGet(const HashMap *m, const char *key, int *out);
+bool hmRemove(HashMap *m, const char *key);
+int  hmSize(const HashMap *m);
+void hmFree(HashMap *m);
+@@ starter
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct Entry {
+    char *key;
+    int value;
+    struct Entry *next;
+} Entry;
+
+struct HashMap {
+    Entry **buckets;
+    int nbuckets;
+    int size;
+};
+
+static unsigned long hashString(const char *s) {
+    unsigned long h = 5381;                  // djb2
+    while (*s) h = h * 33 + (unsigned char)*s++;
+    return h;
+}
+
+HashMap *hmCreate(int buckets) {
+    // TODO
+    return NULL;
+}
+
+void hmPut(HashMap *m, const char *key, int value) {
+    // TODO
+}
+
+bool hmGet(const HashMap *m, const char *key, int *out) {
+    // TODO
+    return false;
+}
+
+bool hmRemove(HashMap *m, const char *key) {
+    // TODO
+    return false;
+}
+
+int hmSize(const HashMap *m) {
+    return m->size;
+}
+
+void hmFree(HashMap *m) {
+    // TODO
+}
+@@ solution
+#include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct Entry {
+    char *key;
+    int value;
+    struct Entry *next;
+} Entry;
+
+struct HashMap {
+    Entry **buckets;
+    int nbuckets;
+    int size;
+};
+
+static unsigned long hashString(const char *s) {
+    unsigned long h = 5381;
+    while (*s) h = h * 33 + (unsigned char)*s++;
+    return h;
+}
+
+HashMap *hmCreate(int buckets) {
+    HashMap *m = malloc(sizeof *m);
+    if (m == NULL) return NULL;
+    m->buckets = calloc(buckets, sizeof *m->buckets);   /* all chains empty */
+    if (m->buckets == NULL) {
+        free(m);
+        return NULL;
+    }
+    m->nbuckets = buckets;
+    m->size = 0;
+    return m;
+}
+
+static Entry **findLink(const HashMap *m, const char *key) {
+    Entry **link = &m->buckets[hashString(key) % m->nbuckets];
+    while (*link != NULL && strcmp((*link)->key, key) != 0)
+        link = &(*link)->next;
+    return link;                                        /* *link is the entry or NULL */
+}
+
+void hmPut(HashMap *m, const char *key, int value) {
+    Entry **link = findLink(m, key);
+    if (*link != NULL) {
+        (*link)->value = value;
+        return;
+    }
+    Entry *e = malloc(sizeof *e);
+    if (e == NULL) return;
+    e->key = strdup(key);
+    if (e->key == NULL) {
+        free(e);
+        return;
+    }
+    e->value = value;
+    e->next = NULL;
+    *link = e;
+    m->size++;
+}
+
+bool hmGet(const HashMap *m, const char *key, int *out) {
+    Entry *e = *findLink(m, key);
+    if (e == NULL) return false;
+    *out = e->value;
+    return true;
+}
+
+bool hmRemove(HashMap *m, const char *key) {
+    Entry **link = findLink(m, key);
+    Entry *e = *link;
+    if (e == NULL) return false;
+    *link = e->next;
+    free(e->key);
+    free(e);
+    m->size--;
+    return true;
+}
+
+int hmSize(const HashMap *m) {
+    return m->size;
+}
+
+void hmFree(HashMap *m) {
+    if (m == NULL) return;
+    for (int i = 0; i < m->nbuckets; i++) {
+        Entry *e = m->buckets[i];
+        while (e != NULL) {
+            Entry *next = e->next;
+            free(e->key);
+            free(e);
+            e = next;
+        }
+    }
+    free(m->buckets);
+    free(m);
+}
+@@ driver
+#include "lc_driver.h"
+#include <stdio.h>
+
+static char *borrowed_key(const char *text)
+{
+    char *k = (char *)lc_harness_alloc(strlen(text) + 1);
+    memcpy(k, text, strlen(text) + 1);
+    lc_make_readonly(k);
+    return k;
+}
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int nb = lc_read_int();
+        const LcJson *ops = lc_read_json(), *args = lc_read_json();
+        int n = lc_json_len(ops), i, j;
+        HashMap *m;
+        if (nb < 1) lc_abort_case("Invalid test case", "buckets must be at least 1.");
+        if (lc_json_len(args) != n) lc_abort_case("Invalid test case", "operations and arguments must have the same length.");
+        m = hmCreate(nb);
+        if (!m) {
+            lc_fail("hmCreate returned NULL.");
+            lc_out_null();
+            lc_end_case();
+            continue;
+        }
+        lc_out_begin();
+        for (i = 0; i < n; i++) {
+            const char *op = lc_json_str(lc_json_at(ops, i));
+            const LcJson *arg = lc_json_at(args, i);
+            if (strcmp(op, "put") == 0) {
+                char *k = borrowed_key(lc_json_str(lc_json_at(arg, 0)));
+                hmPut(m, k, lc_json_int(lc_json_at(arg, 1)));
+                lc_harness_release(k);
+                lc_out_null();
+            } else if (strcmp(op, "get") == 0) {
+                char *k = borrowed_key(lc_json_str(lc_json_at(arg, 0)));
+                int v = -777;
+                bool found = hmGet(m, k, &v);
+                lc_harness_release(k);
+                if (found) lc_out_int(v);
+                else lc_out_null();
+            } else if (strcmp(op, "remove") == 0) {
+                char *k = borrowed_key(lc_json_str(lc_json_at(arg, 0)));
+                bool ok = hmRemove(m, k);
+                lc_harness_release(k);
+                lc_out_bool(ok);
+            } else if (strcmp(op, "size") == 0) {
+                lc_out_int(hmSize(m));
+            } else if (strcmp(op, "putRange") == 0 || strcmp(op, "sumRange") == 0) {
+                const char *prefix = lc_json_str(lc_json_at(arg, 0));
+                int count = lc_json_int(lc_json_at(arg, 1));
+                long long sum = 0;
+                char text[64];
+                for (j = 0; j < count; j++) {
+                    char *k;
+                    snprintf(text, sizeof text, "%s%d", prefix, j);
+                    k = borrowed_key(text);
+                    if (op[0] == 'p') {
+                        hmPut(m, k, j);
+                    } else {
+                        int v = 0;
+                        if (hmGet(m, k, &v)) sum += v;
+                    }
+                    lc_harness_release(k);
+                }
+                if (op[0] == 'p') lc_out_null();
+                else lc_out_int(sum);
+            } else {
+                lc_abort_case("Invalid test case", "Unknown operation \"%s\".", op);
+            }
+        }
+        lc_out_end();
+        hmFree(m);
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+1
+["put","put","put","put","put","remove","remove","get","get","get","size"]
+[["x1",1],["x2",2],["x3",3],["x4",4],["x5",5],["x3"],["x1"],["x1"],["x5"],["x2"],[]]
+
+16
+["size","get","remove"]
+[[],["nothing"],["nothing"]]
+
+64
+["putRange","size","sumRange","remove","remove","sumRange","size","put","sumRange"]
+[["k",2000],[],["k",2000],["k5"],["k1999"],["k",2000],[],["k5",100],["k",2000]]
+
+7
+["put","put","put","put","get","get","remove","put","get","size"]
+[["apple",1],["banana",2],["cherry",3],["apple",4],["apple"],["banana"],["banana"],["banana",20],["banana"],[]]
+@@ editorial
+## Approach: buckets of linked lists
+
+```c
+static Entry **findLink(const HashMap *m, const char *key) {
+    Entry **link = &m->buckets[hashString(key) % m->nbuckets];
+    while (*link != NULL && strcmp((*link)->key, key) != 0)
+        link = &(*link)->next;
+    return link;        // *link is the matching entry, or NULL (end of the chain)
+}
+```
+
+Returning the **link** (pointer to the pointer that leads to the entry) makes all three operations short:
+
+- **put**: if `*link` exists, update it; otherwise create an entry and store it in `*link`.
+- **get**: `*link` is the entry or NULL.
+- **remove**: `*link = e->next;` unlinks it, then free the key copy and the entry.
+
+### Ownership
+```c
+e->key = strdup(key);    // the map owns this copy
+...
+free(e->key);            // so the map frees it
+free(e);
+```
+Storing `e->key = (char *)key` compiles and even passes a quick test, but the caller's string is freed right after `hmPut` returns. Every later lookup would then compare against freed memory.
+
+### Freeing the whole map
+Free in the order: each chain's entries (keys first), then the bucket array, then the map struct, contents before containers, as with the matrix.
+
+### Load factor
+With `n` entries in `b` buckets, chains average `n / b` entries. Real hash maps grow the bucket array (and rehash) when `n / b` exceeds about 0.75–1, which keeps operations O(1) on average.
+
+**Complexity:** O(1 + n/b) average per operation.
+
+@@@ problem fixed-size-pool-allocator
+@@ meta
+{
+  "title": "Fixed-Size Pool Allocator",
+  "difficulty": "Hard",
+  "topics": ["Allocators", "Free list", "void pointers"],
+  "kind": "design",
+  "params": [{"name": "blockSize", "type": "int"}, {"name": "blockCount", "type": "int"}, {"name": "operations", "type": "string[]"}, {"name": "arguments", "type": "any[][]"}],
+  "examples": [
+    {"input": ["16", "3", "[\"alloc\",\"alloc\",\"alloc\",\"alloc\",\"available\",\"free\",\"available\",\"alloc\",\"check\"]", "[[],[],[],[],[],[1],[],[],[]]"], "output": "[0,1,2,null,0,null,1,3,true]", "explanation": "alloc prints a block number assigned by the harness (0, 1, 2, ...) or null when the pool is exhausted. free takes such a number. check verifies that no block was overwritten by another."}
+  ],
+  "hints": [
+    "Allocate all blocks at once in poolCreate: one big array of blockSize * blockCount bytes.",
+    "Thread a free list through the free blocks themselves: the first bytes of a free block store a pointer to the next free block.",
+    "poolAlloc pops the head of the free list; poolFree pushes the block back. Both are O(1) and never call malloc."
+  ],
+  "constraints": ["8 <= blockSize <= 256, a multiple of 8", "1 <= blockCount <= 1000"],
+  "memory": "`poolCreate` may allocate (at most twice). `poolAlloc` and `poolFree` must not call `malloc` or `free`. `poolDestroy` releases everything. Blocks must be 8-byte aligned and must never overlap."
+}
+@@ description
+A **pool allocator** hands out blocks of a single fixed size from a pre-allocated array. Allocating and freeing are O(1), there is no fragmentation, and the memory used is known up front. Kernels, games and network stacks use pools for objects they create and destroy constantly (packets, particles, nodes).
+
+```c
+typedef struct Pool Pool;
+
+Pool *poolCreate(size_t blockSize, int blockCount);
+void *poolAlloc(Pool *p);              // a free block, or NULL if none is left
+void  poolFree(Pool *p, void *block);  // give a block back
+int   poolAvailable(const Pool *p);    // number of free blocks
+void  poolDestroy(Pool *p);
+```
+
+**The trick:** a free block's memory is unused, so use it to remember which block is free next. That *intrusive free list* costs zero extra memory.
+
+The harness numbers the blocks you return (0, 1, 2, ...), fills each one completely with its own byte pattern, and `check` verifies that the patterns are intact. Blocks that overlap, or a free list that writes into a block still in use, are detected.
+@@ prelude
+#include <stddef.h>
+typedef struct Pool Pool;
+Pool *poolCreate(size_t blockSize, int blockCount);
+void *poolAlloc(Pool *p);
+void  poolFree(Pool *p, void *block);
+int   poolAvailable(const Pool *p);
+void  poolDestroy(Pool *p);
+@@ starter
+#include <stddef.h>
+#include <stdlib.h>
+
+struct Pool {
+    unsigned char *memory;   // blockSize * blockCount bytes
+    void *freeList;          // first free block (each free block stores the next one)
+    int available;
+};
+
+Pool *poolCreate(size_t blockSize, int blockCount) {
+    // TODO
+    return NULL;
+}
+
+void *poolAlloc(Pool *p) {
+    // TODO
+    return NULL;
+}
+
+void poolFree(Pool *p, void *block) {
+    // TODO
+}
+
+int poolAvailable(const Pool *p) {
+    return p->available;
+}
+
+void poolDestroy(Pool *p) {
+    // TODO
+}
+@@ solution
+#include <stddef.h>
+#include <stdlib.h>
+
+struct Pool {
+    unsigned char *memory;
+    void *freeList;
+    int available;
+};
+
+Pool *poolCreate(size_t blockSize, int blockCount) {
+    Pool *p = malloc(sizeof *p);
+    if (p == NULL) return NULL;
+    p->memory = malloc(blockSize * (size_t)blockCount);
+    if (p->memory == NULL) {
+        free(p);
+        return NULL;
+    }
+    /* chain every block into the free list: block i points to block i + 1 */
+    p->freeList = NULL;
+    for (int i = blockCount - 1; i >= 0; i--) {
+        void **block = (void **)(p->memory + (size_t)i * blockSize);
+        *block = p->freeList;
+        p->freeList = block;
+    }
+    p->available = blockCount;
+    return p;
+}
+
+void *poolAlloc(Pool *p) {
+    void **block = p->freeList;
+    if (block == NULL) return NULL;
+    p->freeList = *block;          /* the next free block */
+    p->available--;
+    return block;
+}
+
+void poolFree(Pool *p, void *block) {
+    if (block == NULL) return;
+    *(void **)block = p->freeList; /* link it in front */
+    p->freeList = block;
+    p->available++;
+}
+
+int poolAvailable(const Pool *p) {
+    return p->available;
+}
+
+void poolDestroy(Pool *p) {
+    if (p == NULL) return;
+    free(p->memory);
+    free(p);
+}
+@@ driver
+#include "lc_driver.h"
+#include <stdint.h>
+
+static int intact(unsigned char *b, size_t size, unsigned char pat)
+{
+    size_t k;
+    for (k = 0; k < size; k++)
+        if (b[k] != pat) return 0;
+    return 1;
+}
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int bs = lc_read_int(), count = lc_read_int();
+        const LcJson *ops = lc_read_json(), *args = lc_read_json();
+        int n = lc_json_len(ops), i, j, made = 0, capb = lc_json_len(ops) + count + 1;
+        unsigned char **blocks;
+        unsigned char *alive;
+        long long allocs, frees;
+        Pool *p;
+        if (bs < 8 || bs % 8 != 0 || count < 1) lc_abort_case("Invalid test case", "blockSize must be a multiple of 8 (>= 8) and blockCount >= 1.");
+        if (lc_json_len(args) != n) lc_abort_case("Invalid test case", "operations and arguments must have the same length.");
+        blocks = (unsigned char **)lc_harness_alloc(sizeof(*blocks) * (size_t)capb);
+        alive = (unsigned char *)lc_harness_alloc((size_t)capb);
+        p = poolCreate((size_t)bs, count);
+        if (!p) {
+            lc_fail("poolCreate returned NULL.");
+            lc_out_null();
+            lc_end_case();
+            continue;
+        }
+        allocs = lc_alloc_count();
+        frees = lc_free_count();
+        lc_out_begin();
+        for (i = 0; i < n; i++) {
+            const char *op = lc_json_str(lc_json_at(ops, i));
+            const LcJson *arg = lc_json_at(args, i);
+            if (strcmp(op, "alloc") == 0) {
+                unsigned char *b = (unsigned char *)poolAlloc(p);
+                if (!b) {
+                    lc_out_null();
+                    continue;
+                }
+                if (made == capb) lc_abort_case("Pool never runs out", "poolAlloc returned more blocks than the pool holds.");
+                if ((uintptr_t)b % 8 != 0) lc_fail("poolAlloc returned an address that is not 8-byte aligned.");
+                for (j = 0; j < made; j++)
+                    if (alive[j] && b < blocks[j] + bs && blocks[j] < b + bs)
+                        lc_abort_case("Overlapping blocks", "poolAlloc returned a block that overlaps block %d, which is still in use.", j);
+                memset(b, 0x11 + made % 200, (size_t)bs);
+                blocks[made] = b;
+                alive[made] = 1;
+                lc_out_int(made++);
+            } else if (strcmp(op, "free") == 0) {
+                int h = lc_json_int(lc_json_at(arg, 0));
+                if (h < 0 || h >= made || !alive[h]) lc_abort_case("Invalid test case", "Block %d is not in use.", h);
+                if (!intact(blocks[h], (size_t)bs, (unsigned char)(0x11 + h % 200)))
+                    lc_fail("Block %d was overwritten while it was in use: blocks overlap, or the free list writes into used blocks.", h);
+                alive[h] = 0;
+                poolFree(p, blocks[h]);
+                lc_out_null();
+            } else if (strcmp(op, "available") == 0) {
+                lc_out_int(poolAvailable(p));
+            } else if (strcmp(op, "check") == 0) {
+                int ok = 1;
+                for (j = 0; j < made; j++)
+                    if (alive[j] && !intact(blocks[j], (size_t)bs, (unsigned char)(0x11 + j % 200))) ok = 0;
+                if (!ok) lc_fail("A block in use was overwritten: blocks overlap, or the free list writes into used blocks.");
+                lc_out_bool(ok);
+            } else if (strcmp(op, "allocAll") == 0 || strcmp(op, "freeAll") == 0) {
+                int got = 0;
+                if (op[0] == 'a') {
+                    unsigned char *b;
+                    while ((b = (unsigned char *)poolAlloc(p)) != NULL) {
+                        if (got >= count) lc_abort_case("Pool never runs out", "poolAlloc returned more blocks than the pool holds.");
+                        if (made == capb) {
+                            unsigned char **nb = (unsigned char **)lc_harness_alloc(sizeof(*nb) * (size_t)capb * 2);
+                            unsigned char *na = (unsigned char *)lc_harness_alloc((size_t)capb * 2);
+                            memcpy(nb, blocks, sizeof(*nb) * (size_t)capb);
+                            memcpy(na, alive, (size_t)capb);
+                            blocks = nb;
+                            alive = na;
+                            capb *= 2;
+                        }
+                        memset(b, 0x11 + made % 200, (size_t)bs);
+                        blocks[made] = b;
+                        alive[made++] = 1;
+                        got++;
+                    }
+                    lc_out_int(got);
+                } else {
+                    for (j = 0; j < made; j++)
+                        if (alive[j]) {
+                            alive[j] = 0;
+                            poolFree(p, blocks[j]);
+                        }
+                    lc_out_null();
+                }
+            } else {
+                lc_abort_case("Invalid test case", "Unknown operation \"%s\".", op);
+            }
+        }
+        lc_out_end();
+        if (lc_alloc_count() != allocs || lc_free_count() != frees)
+            lc_fail("poolAlloc/poolFree called malloc or free. A pool hands out pieces of the memory it allocated in poolCreate.");
+        poolDestroy(p);
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+8
+1
+["alloc","alloc","free","alloc","free","available"]
+[[],[],[0],[],[1],[]]
+
+64
+10
+["alloc","alloc","alloc","alloc","alloc","free","free","free","alloc","alloc","check","available"]
+[[],[],[],[],[],[0],[2],[4],[],[],[],[]]
+
+32
+100
+["allocAll","available","freeAll","available","allocAll","check"]
+[[],[],[],[],[],[]]
+
+24
+4
+["alloc","alloc","free","free","alloc","alloc","alloc","alloc","alloc","check","available"]
+[[],[],[1],[0],[],[],[],[],[],[],[]]
+@@ editorial
+## Approach: an intrusive free list
+
+```c
+struct Pool {
+    unsigned char *memory;   // all the blocks, contiguous
+    void *freeList;          // first free block
+    int available;
+};
+
+Pool *poolCreate(size_t blockSize, int blockCount) {
+    Pool *p = malloc(sizeof *p);
+    if (p == NULL) return NULL;
+    p->memory = malloc(blockSize * (size_t)blockCount);
+    if (p->memory == NULL) { free(p); return NULL; }
+    p->freeList = NULL;
+    for (int i = blockCount - 1; i >= 0; i--) {          // chain all blocks
+        void **block = (void **)(p->memory + (size_t)i * blockSize);
+        *block = p->freeList;                           // store "next" inside the block
+        p->freeList = block;
+    }
+    p->available = blockCount;
+    return p;
+}
+
+void *poolAlloc(Pool *p) {
+    void **block = p->freeList;
+    if (block == NULL) return NULL;
+    p->freeList = *block;           // pop
+    p->available--;
+    return block;
+}
+
+void poolFree(Pool *p, void *block) {
+    if (block == NULL) return;
+    *(void **)block = p->freeList;  // push
+    p->freeList = block;
+    p->available++;
+}
+```
+
+### Why it works
+A free block's bytes aren't used by anyone, so its first 8 bytes can hold a pointer to the next free block. Once a block is handed out, the user may overwrite those bytes, and that is fine, because it is no longer on the list. This is why the minimum block size is `sizeof(void *)`.
+
+### `void **`
+`(void **)block` treats the block's address as "a place that stores a `void *`", so `*block = next` writes a pointer into the block's first bytes.
+
+### What a pool can't detect
+If the user keeps using a block after `poolFree`, they overwrite the free list's "next" pointer, and a later `poolAlloc` returns garbage. Debug pools fill freed blocks with a pattern (like LeakCode's 0xDD) to catch this.
+
+**Complexity:** O(1) alloc and free; O(blockCount) to create.
+
+@@@ problem lru-cache
+@@ meta
+{
+  "title": "LRU Cache",
+  "difficulty": "Hard",
+  "topics": ["Design", "Hash table", "Doubly linked list"],
+  "kind": "design",
+  "params": [{"name": "capacity", "type": "int"}, {"name": "operations", "type": "string[]"}, {"name": "arguments", "type": "any[][]"}],
+  "examples": [
+    {"input": ["2", "[\"put\",\"put\",\"get\",\"put\",\"get\",\"put\",\"get\",\"get\",\"get\"]", "[[1,1],[2,2],[1],[3,3],[2],[4,4],[1],[3],[4]]"], "output": "[null,null,1,null,-1,null,-1,3,4]", "explanation": "get(1) makes 1 the most recent, so put(3,3) evicts key 2. Then put(4,4) evicts key 1."}
+  ],
+  "hints": [
+    "A doubly linked list keeps entries in order of use: move an entry to the front whenever it is read or written.",
+    "To find an entry in O(1), index it: keys are at most 10000, so an array of 10001 node pointers works as a hash table.",
+    "When the cache is full, the least recently used entry is at the back of the list: unlink it, clear its index slot, and free it."
+  ],
+  "constraints": ["1 <= capacity <= 3000", "0 <= key <= 10^4", "putRange [lo, hi] puts k -> 2k for every k in [lo, hi)", "getSum [lo, hi] prints the sum of get(k) for k in [lo, hi) (misses count as -1)"],
+  "memory": "Evicted entries must be freed when they are evicted. `lruFree` releases everything."
+}
+@@ description
+Design a **least recently used** cache with a fixed capacity. When it is full and a new key arrives, it evicts the entry that was used least recently.
+
+```c
+typedef struct LRUCache LRUCache;
+
+LRUCache *lruCreate(int capacity);
+int  lruGet(LRUCache *c, int key);              // the value, or -1; marks key as used
+void lruPut(LRUCache *c, int key, int value);   // insert or update; marks key as used
+void lruFree(LRUCache *c);
+```
+
+`lruGet` and `lruPut` should both run in **O(1)**. The classic design combines a hash table (find the entry) with a doubly linked list (keep the usage order, unlink anything in O(1)).
+
+LeetCode asks for exactly this. LeakCode also checks the memory side: every evicted entry must be freed at the moment it is evicted, and `lruFree` must leave nothing behind.
+@@ prelude
+typedef struct LRUCache LRUCache;
+LRUCache *lruCreate(int capacity);
+int  lruGet(LRUCache *c, int key);
+void lruPut(LRUCache *c, int key, int value);
+void lruFree(LRUCache *c);
+@@ starter
+#include <stdlib.h>
+
+#define MAX_KEY 10000
+
+typedef struct Node {
+    int key, value;
+    struct Node *prev, *next;
+} Node;
+
+struct LRUCache {
+    int capacity, size;
+    Node head;                  // sentinel: head.next is the most recent entry
+    Node *index[MAX_KEY + 1];   // key -> node, or NULL
+};
+
+LRUCache *lruCreate(int capacity) {
+    // TODO
+    return NULL;
+}
+
+int lruGet(LRUCache *c, int key) {
+    // TODO
+    return -1;
+}
+
+void lruPut(LRUCache *c, int key, int value) {
+    // TODO
+}
+
+void lruFree(LRUCache *c) {
+    // TODO
+}
+@@ solution
+#include <stdlib.h>
+
+#define MAX_KEY 10000
+
+typedef struct Node {
+    int key, value;
+    struct Node *prev, *next;
+} Node;
+
+struct LRUCache {
+    int capacity, size;
+    Node head;                  /* sentinel of a circular doubly linked list */
+    Node *index[MAX_KEY + 1];
+};
+
+static void listRemove(Node *n) {
+    n->prev->next = n->next;
+    n->next->prev = n->prev;
+}
+
+static void pushFront(LRUCache *c, Node *n) {
+    n->next = c->head.next;
+    n->prev = &c->head;
+    c->head.next->prev = n;
+    c->head.next = n;
+}
+
+LRUCache *lruCreate(int capacity) {
+    LRUCache *c = calloc(1, sizeof *c);       /* index[] starts all NULL */
+    if (c == NULL) return NULL;
+    c->capacity = capacity;
+    c->head.next = c->head.prev = &c->head;
+    return c;
+}
+
+int lruGet(LRUCache *c, int key) {
+    Node *n = c->index[key];
+    if (n == NULL) return -1;
+    listRemove(n);
+    pushFront(c, n);
+    return n->value;
+}
+
+void lruPut(LRUCache *c, int key, int value) {
+    Node *n = c->index[key];
+    if (n != NULL) {
+        n->value = value;
+        listRemove(n);
+        pushFront(c, n);
+        return;
+    }
+    if (c->size == c->capacity) {
+        Node *old = c->head.prev;              /* least recently used */
+        listRemove(old);
+        c->index[old->key] = NULL;
+        free(old);
+        c->size--;
+    }
+    n = malloc(sizeof *n);
+    if (n == NULL) return;
+    n->key = key;
+    n->value = value;
+    pushFront(c, n);
+    c->index[key] = n;
+    c->size++;
+}
+
+void lruFree(LRUCache *c) {
+    if (c == NULL) return;
+    Node *n = c->head.next;
+    while (n != &c->head) {
+        Node *next = n->next;
+        free(n);
+        n = next;
+    }
+    free(c);
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int cap = lc_read_int();
+        const LcJson *ops = lc_read_json(), *args = lc_read_json();
+        int n = lc_json_len(ops), i, k;
+        LRUCache *c;
+        if (cap < 1) lc_abort_case("Invalid test case", "capacity must be at least 1.");
+        if (lc_json_len(args) != n) lc_abort_case("Invalid test case", "operations and arguments must have the same length.");
+        c = lruCreate(cap);
+        if (!c) {
+            lc_fail("lruCreate returned NULL.");
+            lc_out_null();
+            lc_end_case();
+            continue;
+        }
+        lc_out_begin();
+        for (i = 0; i < n; i++) {
+            const char *op = lc_json_str(lc_json_at(ops, i));
+            const LcJson *a = lc_json_at(args, i);
+            if (strcmp(op, "get") == 0) {
+                lc_out_int(lruGet(c, lc_json_int(lc_json_at(a, 0))));
+            } else if (strcmp(op, "put") == 0) {
+                lruPut(c, lc_json_int(lc_json_at(a, 0)), lc_json_int(lc_json_at(a, 1)));
+                lc_out_null();
+            } else if (strcmp(op, "putRange") == 0) {
+                int lo = lc_json_int(lc_json_at(a, 0)), hi = lc_json_int(lc_json_at(a, 1));
+                for (k = lo; k < hi; k++) lruPut(c, k, 2 * k);
+                lc_out_null();
+            } else if (strcmp(op, "getSum") == 0) {
+                int lo = lc_json_int(lc_json_at(a, 0)), hi = lc_json_int(lc_json_at(a, 1));
+                long long sum = 0;
+                for (k = lo; k < hi; k++) sum += lruGet(c, k);
+                lc_out_int(sum);
+            } else {
+                lc_abort_case("Invalid test case", "Unknown operation \"%s\".", op);
+            }
+        }
+        lc_out_end();
+        lruFree(c);
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+1
+["put","get","put","get","get","put","get"]
+[[5,50],[5],[6,60],[5],[6],[6,61],[6]]
+
+3
+["put","put","put","get","put","get","get","get","get","put","get"]
+[[1,10],[2,20],[3,30],[1],[4,40],[1],[2],[3],[4],[3,33],[3]]
+
+2
+["put","put","put","put","get","get"]
+[[1,1],[1,2],[1,3],[2,4],[1],[2]]
+
+1000
+["putRange","getSum","getSum","putRange","getSum"]
+[[0,5000],[4000,5000],[0,10],[0,500],[0,5000]]
+
+3000
+["putRange","getSum","putRange","getSum"]
+[[0,3000],[0,3000],[3000,6000],[0,6000]]
+@@ editorial
+## Approach: hash index + doubly linked list
+
+```c
+typedef struct Node { int key, value; struct Node *prev, *next; } Node;
+
+struct LRUCache {
+    int capacity, size;
+    Node head;                  // sentinel: head.next = most recent, head.prev = least recent
+    Node *index[MAX_KEY + 1];   // key -> node
+};
+
+void lruPut(LRUCache *c, int key, int value) {
+    Node *n = c->index[key];
+    if (n != NULL) {                     // update + mark as used
+        n->value = value;
+        listRemove(n);
+        pushFront(c, n);
+        return;
+    }
+    if (c->size == c->capacity) {        // evict the least recently used
+        Node *old = c->head.prev;
+        listRemove(old);
+        c->index[old->key] = NULL;       // forget it in the index too
+        free(old);                       // and give its memory back
+        c->size--;
+    }
+    n = malloc(sizeof *n);
+    n->key = key;
+    n->value = value;
+    pushFront(c, n);
+    c->index[key] = n;
+    c->size++;
+}
+```
+
+### Why a sentinel?
+A circular list with one dummy node (`head`) has no NULL ends: inserting at the front and unlinking anywhere are the same three or four pointer assignments, with no special cases for an empty list or the first/last node. The sentinel lives inside the cache struct, so it is never allocated or freed separately.
+
+### The two places that point to a node
+Each node is referenced by the list *and* by `index[key]`. On eviction both must be cleared before the node is freed, or the index keeps a dangling pointer that a later `get` dereferences.
+
+### Index choices
+With keys bounded by 10 000, a plain array is a perfect hash table. For arbitrary keys, use a hash map like the one from *Hash Map with Chaining*.
+
+**Complexity:** O(1) per operation; memory O(capacity + key range).
+
+@@@ problem implement-malloc
+@@ meta
+{
+  "title": "Implement malloc and free",
+  "difficulty": "Hard",
+  "topics": ["Allocators", "Free list", "Coalescing"],
+  "kind": "design",
+  "params": [{"name": "capacity", "type": "int"}, {"name": "operations", "type": "string[]"}, {"name": "arguments", "type": "any[][]"}],
+  "examples": [
+    {"input": ["4096", "[\"alloc\",\"alloc\",\"alloc\",\"free\",\"free\",\"free\",\"big\"]", "[[100],[200],[300],[0],[1],[2],[]]"], "output": "[true,true,true,null,null,null,true]", "explanation": "alloc prints whether heapAlloc succeeded; free takes the number of an earlier alloc. After everything is freed, big requests capacity - 256 bytes: it only fits if the freed neighbours were merged back into one block."}
+  ],
+  "hints": [
+    "Put a small header before every block: its size and whether it is free. Walking from header to header visits every block.",
+    "heapAlloc: round the size up to a multiple of 16, find the first free block that is large enough, split off the rest if it's big enough to be useful.",
+    "heapFree: mark the block free, then merge it with free neighbours (coalescing). Without merging, the heap fragments into small useless pieces.",
+    "Keep the header size a multiple of 16 so that the returned pointers stay 16-byte aligned."
+  ],
+  "constraints": ["capacity is a multiple of 4096, at most 16384", "1 <= size <= capacity", "Your headers may use at most 64 bytes per block", "allocMany [count, size] performs count allocations and prints how many succeeded; freeAll frees every live block"],
+  "memory": "Everything must live inside the buffer given to `heapInit`: no calls to the real `malloc`. Returned pointers must be 16-byte aligned and must never overlap."
+}
+@@ description
+The capstone: write the allocator yourself. `heapInit` gives you one buffer (just like the operating system gives `malloc` a region of memory) and you manage it.
+
+```c
+void  heapInit(void *buffer, size_t size);  // start managing this buffer (16-byte aligned)
+void *heapAlloc(size_t size);               // 16-byte aligned block, or NULL if no room
+void  heapFree(void *ptr);                  // NULL does nothing
+```
+
+A classic design is an **implicit free list**:
+
+```
+| hdr | block 0 ... | hdr | (free) ......... | hdr | block 2 ... | hdr | (free) ... |
+```
+
+Each block starts with a header that records its size and whether it is free.
+
+- **Allocate**: walk the headers, find a free block that fits (*first fit*), split it if it's much larger than needed.
+- **Free**: mark the block free, and **coalesce** it with free neighbours. Otherwise the heap fills with small free fragments and large requests fail even when plenty of memory is free in total.
+
+The harness fills every block you return with a pattern and checks it is still intact when the block is freed (so headers must never overwrite user data). `big` asks for `capacity - 256` bytes, which only fits after full coalescing.
+@@ prelude
+#include <stddef.h>
+void  heapInit(void *buffer, size_t size);
+void *heapAlloc(size_t size);
+void  heapFree(void *ptr);
+@@ starter
+#include <stddef.h>
+#include <stdint.h>
+
+typedef struct Header {
+    size_t size;      // bytes in this block, header included
+    size_t free;      // 1 if free, 0 if in use
+} Header;             // 16 bytes: keeps blocks 16-byte aligned
+
+static unsigned char *heapStart;
+static size_t heapSize;
+
+void heapInit(void *buffer, size_t size) {
+    // TODO: one big free block covering the whole buffer.
+}
+
+void *heapAlloc(size_t size) {
+    // TODO: first fit + split.
+    return NULL;
+}
+
+void heapFree(void *ptr) {
+    // TODO: mark free + coalesce.
+}
+@@ solution
+#include <stddef.h>
+#include <stdint.h>
+
+typedef struct Header {
+    size_t size;      /* bytes in this block, header included */
+    size_t free;      /* 1 if free, 0 if in use */
+} Header;
+
+static unsigned char *heapStart;
+static size_t heapSize;
+
+static Header *nextHeader(Header *h) {
+    unsigned char *n = (unsigned char *)h + h->size;
+    return n < heapStart + heapSize ? (Header *)n : NULL;
+}
+
+void heapInit(void *buffer, size_t size) {
+    heapStart = buffer;
+    heapSize = size & ~(size_t)15;
+    Header *h = (Header *)heapStart;
+    h->size = heapSize;
+    h->free = 1;
+}
+
+void *heapAlloc(size_t size) {
+    if (size == 0 || size > heapSize) return NULL;
+    size_t need = sizeof(Header) + ((size + 15) & ~(size_t)15);
+    for (Header *h = (Header *)heapStart; h != NULL; h = nextHeader(h)) {
+        if (!h->free || h->size < need) continue;
+        if (h->size - need >= sizeof(Header) + 16) {      /* split off the rest */
+            Header *rest = (Header *)((unsigned char *)h + need);
+            rest->size = h->size - need;
+            rest->free = 1;
+            h->size = need;
+        }
+        h->free = 0;
+        return h + 1;                                    /* memory right after the header */
+    }
+    return NULL;
+}
+
+void heapFree(void *ptr) {
+    if (ptr == NULL) return;
+    ((Header *)ptr - 1)->free = 1;
+    /* coalesce: merge every run of adjacent free blocks */
+    for (Header *h = (Header *)heapStart; h != NULL; h = nextHeader(h)) {
+        if (!h->free) continue;
+        Header *n;
+        while ((n = nextHeader(h)) != NULL && n->free)
+            h->size += n->size;
+    }
+}
+@@ driver
+#include "lc_driver.h"
+#include <stdint.h>
+
+typedef struct {
+    unsigned char *p;
+    size_t size;
+    int live;
+} Blk;
+
+static unsigned char *g_buf;
+static size_t g_cap;
+static Blk *g_blk;
+static int g_nblk, g_capblk;
+
+static unsigned char pattern(int id) { return (unsigned char)(0x21 + id % 190); }
+
+static int intact(const Blk *b, int id)
+{
+    size_t k;
+    for (k = 0; k < b->size; k++)
+        if (b->p[k] != pattern(id)) return 0;
+    return 1;
+}
+
+static int track(unsigned char *p, size_t size)
+{
+    int j, id;
+    if (g_nblk == g_capblk) {
+        Blk *nb = (Blk *)lc_harness_alloc(sizeof(Blk) * (size_t)(g_capblk * 2));
+        memcpy(nb, g_blk, sizeof(Blk) * (size_t)g_capblk);
+        g_blk = nb;
+        g_capblk *= 2;
+    }
+    id = g_nblk++;
+    g_blk[id].p = p;
+    g_blk[id].size = size;
+    g_blk[id].live = p != NULL;
+    if (!p) return id;
+    if ((uintptr_t)p % 16 != 0) lc_fail("heapAlloc(%zu) returned an address that is not 16-byte aligned.", size);
+    if (p < g_buf || p + size > g_buf + g_cap)
+        lc_abort_case("Block outside the heap", "heapAlloc(%zu) returned a block that does not lie inside the buffer given to heapInit.", size);
+    for (j = 0; j < id; j++)
+        if (g_blk[j].live && p < g_blk[j].p + g_blk[j].size && g_blk[j].p < p + size)
+            lc_abort_case("Overlapping blocks", "heapAlloc(%zu) returned a block that overlaps block %d, which is still in use.", size, j);
+    memset(p, pattern(id), size);
+    return id;
+}
+
+static void release(int id)
+{
+    Blk *b = &g_blk[id];
+    if (!b->live) return;
+    if (!intact(b, id))
+        lc_fail("Block %d was modified while it was in use. Your allocator wrote into user memory (for example a header placed inside another block).", id);
+    b->live = 0;
+    heapFree(b->p);
+}
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int cap = lc_read_int();
+        const LcJson *ops = lc_read_json(), *args = lc_read_json();
+        int n = lc_json_len(ops), i, j;
+        long long before;
+        if (cap <= 0 || cap % 4096 != 0 || cap > 16384) lc_abort_case("Invalid test case", "capacity must be a multiple of 4096, at most 16384.");
+        if (lc_json_len(args) != n) lc_abort_case("Invalid test case", "operations and arguments must have the same length.");
+        g_cap = (size_t)cap;
+        g_buf = (unsigned char *)lc_harness_alloc(g_cap);
+        g_capblk = 64;
+        g_nblk = 0;
+        g_blk = (Blk *)lc_harness_alloc(sizeof(Blk) * (size_t)g_capblk);
+        before = lc_alloc_count();
+        heapInit(g_buf, g_cap);
+        lc_out_begin();
+        for (i = 0; i < n; i++) {
+            const char *op = lc_json_str(lc_json_at(ops, i));
+            const LcJson *a = lc_json_at(args, i);
+            if (strcmp(op, "alloc") == 0) {
+                size_t size = (size_t)lc_json_ll(lc_json_at(a, 0));
+                unsigned char *p = (unsigned char *)heapAlloc(size);
+                track(p, size);
+                lc_out_bool(p != NULL);
+            } else if (strcmp(op, "free") == 0) {
+                int id = lc_json_int(lc_json_at(a, 0));
+                if (id < 0 || id >= g_nblk) lc_abort_case("Invalid test case", "There is no allocation number %d.", id);
+                release(id);
+                lc_out_null();
+            } else if (strcmp(op, "allocMany") == 0) {
+                int count = lc_json_int(lc_json_at(a, 0)), got = 0;
+                size_t size = (size_t)lc_json_ll(lc_json_at(a, 1));
+                for (j = 0; j < count; j++) {
+                    unsigned char *p = (unsigned char *)heapAlloc(size);
+                    track(p, size);
+                    got += p != NULL;
+                }
+                lc_out_int(got);
+            } else if (strcmp(op, "freeAll") == 0) {
+                for (j = 0; j < g_nblk; j++) release(j);
+                lc_out_null();
+            } else if (strcmp(op, "check") == 0) {
+                int ok = 1;
+                for (j = 0; j < g_nblk; j++)
+                    if (g_blk[j].live && !intact(&g_blk[j], j)) ok = 0;
+                if (!ok) lc_fail("A block in use was modified by the allocator.");
+                lc_out_bool(ok);
+            } else if (strcmp(op, "big") == 0) {
+                size_t size = g_cap - 256;
+                unsigned char *p = (unsigned char *)heapAlloc(size);
+                if (p) {
+                    int id = track(p, size);
+                    release(id);
+                }
+                lc_out_bool(p != NULL);
+            } else {
+                lc_abort_case("Invalid test case", "Unknown operation \"%s\".", op);
+            }
+        }
+        lc_out_end();
+        if (lc_alloc_count() != before)
+            lc_fail("Your allocator called the real malloc. Everything must come from the buffer passed to heapInit.");
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+4096
+["alloc","alloc","free","alloc","check","free","free","big"]
+[[100],[200],[0],[50],[],[1],[2],[]]
+
+4096
+["alloc","alloc","alloc","alloc","alloc","alloc","alloc","alloc","alloc","alloc","free","free","free","free","free","alloc","check","freeAll","big"]
+[[200],[200],[200],[200],[200],[200],[200],[200],[200],[200],[1],[3],[5],[7],[9],[1000],[],[],[]]
+
+4096
+["alloc","alloc","alloc","free","alloc","check"]
+[[1500],[1500],[1500],[0],[1400],[]]
+
+4096
+["allocMany","freeAll","big","allocMany","check","freeAll","big"]
+[[50,16],[],[],[30,1],[],[],[]]
+
+8192
+["alloc","alloc","alloc","alloc","free","free","alloc","alloc","free","free","free","free","big"]
+[[1],[7],[33],[2000],[1],[2],[40],[24],[0],[3],[4],[5],[]]
+
+16384
+["allocMany","freeAll","allocMany","freeAll","big"]
+[[80,100],[],[50,200],[],[]]
+@@ editorial
+## Approach: implicit free list with splitting and coalescing
+
+```c
+typedef struct Header { size_t size; size_t free; } Header;   // 16 bytes
+
+void *heapAlloc(size_t size) {
+    if (size == 0 || size > heapSize) return NULL;
+    size_t need = sizeof(Header) + ((size + 15) & ~(size_t)15); // keep 16-byte alignment
+    for (Header *h = (Header *)heapStart; h != NULL; h = nextHeader(h)) {
+        if (!h->free || h->size < need) continue;               // first fit
+        if (h->size - need >= sizeof(Header) + 16) {            // split
+            Header *rest = (Header *)((unsigned char *)h + need);
+            rest->size = h->size - need;
+            rest->free = 1;
+            h->size = need;
+        }
+        h->free = 0;
+        return h + 1;                                           // just past the header
+    }
+    return NULL;
+}
+
+void heapFree(void *ptr) {
+    if (ptr == NULL) return;
+    ((Header *)ptr - 1)->free = 1;                              // header is right before ptr
+    for (Header *h = (Header *)heapStart; h != NULL; h = nextHeader(h)) {
+        if (!h->free) continue;
+        Header *n;
+        while ((n = nextHeader(h)) != NULL && n->free)          // merge free neighbours
+            h->size += n->size;
+    }
+}
+```
+
+### Why the header goes *before* the block
+`free(ptr)` receives only a pointer, so the allocator must find the block's size from it alone. Storing the header at `ptr - sizeof(Header)` makes that O(1). It is also why freeing a pointer you moved (`p++`) or overflowing *backwards* is so destructive with a real `malloc`: it misreads or corrupts these headers.
+
+### Coalescing
+Free blocks of 200 bytes next to each other are useless for a 1000-byte request unless they are merged. This solution re-scans the heap on each free (O(n)), which is simple and good enough here. Real allocators use **boundary tags** (a footer copy of the size at the end of each block, so the previous block is found in O(1)) and **explicit free lists** (free blocks linked together, so allocation doesn't walk used blocks).
+
+### What real allocators add
+- Size classes / bins: separate free lists per size range (glibc, jemalloc, mimalloc).
+- Thread-local caches to avoid locking.
+- Asking the OS for more memory (`VirtualAlloc`, `mmap`, `sbrk`) when the heap is full.
+- Debug modes with guard bytes and poisoning, which is what LeakCode's own allocator does to catch your bugs.
+
+**Complexity:** O(number of blocks) per operation in this simple version.

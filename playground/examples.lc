@@ -1,0 +1,210 @@
+@@@ example hello Hello, world
+#include <stdio.h>
+
+int main(void) {
+    printf("Hello from LeakCode!\n");
+    return 0;
+}
+
+@@@ example input Read numbers from stdin
+#include <stdio.h>
+#include <stdlib.h>
+
+// Type some numbers in the Input box, e.g.  3 1 4 1 5
+int main(void) {
+    int capacity = 4, count = 0, x;
+    int *nums = malloc(capacity * sizeof *nums);
+    if (nums == NULL) return 1;
+
+    while (scanf("%d", &x) == 1) {
+        if (count == capacity) {            // full: double the capacity
+            capacity *= 2;
+            int *bigger = realloc(nums, capacity * sizeof *nums);
+            if (bigger == NULL) { free(nums); return 1; }
+            nums = bigger;
+        }
+        nums[count++] = x;
+    }
+
+    long long sum = 0;
+    for (int i = 0; i < count; i++) sum += nums[i];
+    printf("Read %d numbers, sum = %lld\n", count, sum);
+
+    free(nums);
+    return 0;
+}
+
+@@@ example leak Bug: memory leak
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+// Each call allocates a buffer that nobody frees.
+char *greet(const char *name) {
+    char *msg = malloc(strlen(name) + 9);   // "Hello, " + name + "!" + '\0'
+    sprintf(msg, "Hello, %s!", name);
+    return msg;
+}
+
+int main(void) {
+    printf("%s\n", greet("Ada"));     // the returned block is lost
+    char *s = greet("Linus");
+    printf("%s\n", s);
+    free(s);                          // this one is fine
+    return 0;
+}
+
+@@@ example uaf Bug: use after free
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Node {
+    int value;
+    struct Node *next;
+};
+
+int main(void) {
+    struct Node *head = NULL;
+    for (int i = 3; i >= 1; i--) {
+        struct Node *n = malloc(sizeof *n);
+        n->value = i;
+        n->next = head;
+        head = n;
+    }
+
+    // Classic bug: p->next is read after p has been freed.
+    for (struct Node *p = head; p != NULL; p = p->next) {
+        printf("freeing %d\n", p->value);
+        free(p);
+    }
+    return 0;
+}
+
+@@@ example overflow Bug: heap buffer overflow
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main(void) {
+    const char *word = "memory";
+    char *copy = malloc(strlen(word));   // forgot the +1 for '\0'
+    strcpy(copy, word);
+    printf("%s\n", copy);
+    free(copy);
+    return 0;
+}
+
+@@@ example double-free Bug: double free
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void) {
+    int *data = malloc(10 * sizeof *data);
+    int *alias = data;            // two pointers to the same block
+
+    data[0] = 42;
+    free(data);
+    free(alias);                  // the same block again
+    return 0;
+}
+
+@@@ example dangling Bug: returning a pointer to a local
+#include <stdio.h>
+
+// buf lives on f's stack frame and disappears when f returns.
+char *makeLabel(int id) {
+    char buf[32];
+    sprintf(buf, "item-%d", id);
+    return buf;
+}
+
+int main(void) {
+    char *label = makeLabel(7);
+    printf("%s\n", label);        // garbage, or a crash
+    return 0;
+}
+
+@@@ example uninit Bug: uninitialized variable
+#include <stdio.h>
+
+int main(void) {
+    int total;                    // never initialized
+    int values[] = { 1, 2, 3 };
+    for (int i = 0; i < 3; i++)
+        total += values[i];
+    printf("total = %d\n", total);
+    return 0;
+}
+
+@@@ example stack-array Bug: local array overflow
+#include <stdio.h>
+
+void fill(void) {
+    int squares[5];
+    for (int i = 0; i <= 5; i++)  // writes squares[5]: one past the end
+        squares[i] = i * i;
+    printf("%d\n", squares[4]);
+}
+
+int main(void) {
+    fill();
+    return 0;
+}
+
+@@@ example null Bug: NULL pointer dereference
+#include <stdio.h>
+#include <string.h>
+
+int main(void) {
+    const char *text = "key=value";
+    char *colon = strchr(text, ':');   // there is no ':', so this is NULL
+    printf("value: %s\n", colon + 1);
+    printf("first char: %c\n", *colon);
+    return 0;
+}
+
+@@@ example recursion Bug: infinite recursion
+#include <stdio.h>
+
+int sumTo(int n) {
+    return n + sumTo(n - 1);      // no base case
+}
+
+int main(void) {
+    printf("%d\n", sumTo(10));
+    return 0;
+}
+
+@@@ example list-correct A linked list, done right
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Node {
+    int value;
+    struct Node *next;
+};
+
+struct Node *push(struct Node *head, int value) {
+    struct Node *n = malloc(sizeof *n);
+    if (n == NULL) return head;
+    n->value = value;
+    n->next = head;
+    return n;
+}
+
+void freeList(struct Node *head) {
+    while (head != NULL) {
+        struct Node *next = head->next;   // read before freeing
+        free(head);
+        head = next;
+    }
+}
+
+int main(void) {
+    struct Node *list = NULL;
+    for (int i = 1; i <= 5; i++) list = push(list, i * i);
+    for (struct Node *p = list; p != NULL; p = p->next) printf("%d ", p->value);
+    printf("\n");
+    freeList(list);
+    return 0;
+}

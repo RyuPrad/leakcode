@@ -1,0 +1,21 @@
+{
+  "name": "leakcode",
+  "productName": "LeakCode",
+  "version": "1.0.0",
+  "description": "Practice C programming and memory management, LeetCode style.",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "vendor": "node tools/copy-vendor.js",
+    "verify": "node tools/verify.js",
+    "selftest": "node tools/selftest.js",
+    "package": "node tools/package.js"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^45.1.0",
+    "marked": "^18.1.2",
+    "monaco-editor": "^0.57.0"
+  }
+}

@@ -1,0 +1,560 @@
+@@@ section
+{"id": "trees", "title": "Trees & Recursion", "summary": "Recursive structures on the heap: grow them, tear them down in the right order, and turn them into strings."}
+
+@@@ problem insert-into-a-bst
+@@ meta
+{
+  "title": "Insert into a Binary Search Tree",
+  "difficulty": "Easy",
+  "topics": ["Binary tree", "Recursion", "malloc"],
+  "params": [{"name": "root", "type": "tree"}, {"name": "values", "type": "int[]"}],
+  "examples": [
+    {"input": ["[4,2,7,1,3]", "[5]"], "output": "[4,2,7,1,3,5]", "explanation": "5 > 4 goes right; 5 < 7 goes left; 7 has no left child, so the new node goes there."},
+    {"input": ["[]", "[5,3,8]"], "output": "[5,3,8]", "explanation": "Inserting into an empty tree creates the root."}
+  ],
+  "hints": [
+    "Recursive idea: inserting into an empty tree returns a new node; otherwise insert into the correct subtree and store the result back.",
+    "root->left = bstInsert(root->left, val) works whether root->left was NULL or not.",
+    "Remember to set the new node's left and right to NULL."
+  ],
+  "constraints": ["0 <= number of nodes <= 1000", "all values are distinct", "values never already exist in the tree"],
+  "memory": "Each insertion allocates exactly one node. The harness frees the whole tree at the end."
+}
+@@ description
+Insert `val` into a **binary search tree** (BST) and return the root. In a BST, every node's left subtree holds smaller values and its right subtree holds larger values.
+
+```c
+struct TreeNode {
+    int val;
+    struct TreeNode *left;
+    struct TreeNode *right;
+};
+
+struct TreeNode *bstInsert(struct TreeNode *root, int val);
+```
+
+The harness inserts each number of `values` in order (`root = bstInsert(root, v)`), prints the tree in level order (like LeetCode, `null` marks a missing child), and checks that each insertion allocated exactly one node.
+
+Insert the new node as a leaf: don't rebalance or restructure the tree.
+@@ prelude
+struct TreeNode {
+    int val;
+    struct TreeNode *left;
+    struct TreeNode *right;
+};
+struct TreeNode *bstInsert(struct TreeNode *root, int val);
+@@ starter
+#include <stdlib.h>
+
+/* Provided by the harness:
+ * struct TreeNode {
+ *     int val;
+ *     struct TreeNode *left;
+ *     struct TreeNode *right;
+ * };
+ */
+
+struct TreeNode *bstInsert(struct TreeNode *root, int val) {
+    // TODO
+    return root;
+}
+@@ solution
+#include <stdlib.h>
+
+struct TreeNode *bstInsert(struct TreeNode *root, int val) {
+    if (root == NULL) {
+        struct TreeNode *node = malloc(sizeof *node);
+        if (node == NULL) return NULL;
+        node->val = val;
+        node->left = node->right = NULL;
+        return node;
+    }
+    if (val < root->val)
+        root->left = bstInsert(root->left, val);
+    else
+        root->right = bstInsert(root->right, val);
+    return root;
+}
+@@ driver
+#include "lc_driver.h"
+#define LC_WANT_TREE
+#include "lc_ds.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        struct TreeNode *root = lc_read_tree();
+        int n, i;
+        int *vals = lc_read_int_array(&n);
+        long long before = lc_alloc_count();
+        for (i = 0; i < n; i++) root = bstInsert(root, vals[i]);
+        if (lc_alloc_count() - before != n)
+            lc_fail("%d insertions made %lld allocations. Each insertion should allocate exactly one node.",
+                    n, lc_alloc_count() - before);
+        lc_out_tree(root);
+        lc_free_tree(root, "a node of the tree");
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[40,20,60,10,30,50,70]
+[25]
+
+[1]
+[2,3,4]
+
+[10]
+[5,15,3,7,12,20]
+
+[50,30,70]
+[]
+
+[8,4,12,2,6,10,14]
+[1,3,5,7,9,11,13,15]
+@@ editorial
+## Approach: recurse and re-link
+
+```c
+struct TreeNode *bstInsert(struct TreeNode *root, int val) {
+    if (root == NULL) {                       // found the spot: make a leaf
+        struct TreeNode *node = malloc(sizeof *node);
+        if (node == NULL) return NULL;
+        node->val = val;
+        node->left = node->right = NULL;
+        return node;
+    }
+    if (val < root->val)
+        root->left = bstInsert(root->left, val);
+    else
+        root->right = bstInsert(root->right, val);
+    return root;
+}
+```
+
+The function returns "the subtree after insertion". Assigning the result back (`root->left = ...`) links the new leaf to its parent automatically.
+
+### Iterative version with a pointer-to-pointer
+```c
+struct TreeNode **link = &root;
+while (*link != NULL)
+    link = val < (*link)->val ? &(*link)->left : &(*link)->right;
+*link = newNode;          /* link points at the NULL child to replace */
+return root;
+```
+No recursion, so no risk of a deep stack on a degenerate (list-shaped) tree.
+
+**Complexity:** O(height) per insertion: O(log n) for a balanced tree, O(n) for a degenerate one.
+
+@@@ problem free-a-binary-tree
+@@ meta
+{
+  "title": "Free a Binary Tree",
+  "difficulty": "Easy",
+  "topics": ["Binary tree", "Recursion", "free"],
+  "params": [{"name": "root", "type": "tree"}],
+  "examples": [
+    {"input": ["[1,2,3]"], "output": "3", "explanation": "Three nodes are freed: the two children first, then the root."},
+    {"input": ["[]"], "output": "0"}
+  ],
+  "hints": [
+    "Which order is safe: parent first, or children first?",
+    "Post-order: free the left subtree, free the right subtree, then free the node itself.",
+    "Return 1 + freeTree(left) + freeTree(right) for a non-empty tree."
+  ],
+  "constraints": ["0 <= number of nodes <= 2000"],
+  "memory": "Free every node exactly once, and never read a node after freeing it."
+}
+@@ description
+Free every node of the tree and return how many nodes you freed.
+
+```c
+int freeTree(struct TreeNode *root);
+```
+
+The order matters. A node holds the only pointers to its children, so if you free the node first, you can no longer (legally) read `node->left` and `node->right`. The harness detects both mistakes: nodes left behind are reported as leaks, and reading a freed node as a use-after-free.
+@@ prelude
+struct TreeNode {
+    int val;
+    struct TreeNode *left;
+    struct TreeNode *right;
+};
+int freeTree(struct TreeNode *root);
+@@ starter
+#include <stdlib.h>
+
+/* struct TreeNode { int val; struct TreeNode *left; struct TreeNode *right; }; */
+
+int freeTree(struct TreeNode *root) {
+    // TODO: free every node, return how many were freed.
+    return 0;
+}
+@@ solution
+#include <stdlib.h>
+
+int freeTree(struct TreeNode *root) {
+    if (root == NULL) return 0;
+    int count = freeTree(root->left) + freeTree(root->right);
+    free(root);
+    return count + 1;
+}
+@@ driver
+#include "lc_driver.h"
+#define LC_WANT_TREE
+#include "lc_ds.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        struct TreeNode *root = lc_read_tree();
+        lc_out_int(freeTree(root));
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[1,null,2,null,3]
+
+[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
+
+[5,4,8,11,null,13,4,7,2,null,null,null,1]
+
+[0]
+@@ editorial
+## Approach: post-order traversal
+
+```c
+int freeTree(struct TreeNode *root) {
+    if (root == NULL) return 0;
+    int count = freeTree(root->left) + freeTree(root->right);  // children first
+    free(root);                                                // then the parent
+    return count + 1;
+}
+```
+
+Freeing is *post-order* because a node must stay valid while its children are being reached through it.
+
+### Saving the children first also works
+```c
+struct TreeNode *l = root->left, *r = root->right;
+free(root);
+return 1 + freeTree(l) + freeTree(r);
+```
+Reading the fields into locals *before* `free` is just as safe, the same idea as saving `next` when freeing a list.
+
+### Very deep trees
+Recursion depth equals tree height. A tree shaped like a 1 000 000-node list overflows the stack. For such cases use an explicit stack (an array on the heap) or the "rotate right" trick that flattens the tree while freeing it in O(1) extra memory.
+
+**Complexity:** O(n) time, O(height) stack.
+
+@@@ problem delete-node-in-a-bst
+@@ meta
+{
+  "title": "Delete a Node in a BST",
+  "difficulty": "Medium",
+  "topics": ["Binary tree", "BST", "free"],
+  "params": [{"name": "root", "type": "tree"}, {"name": "key", "type": "int"}],
+  "examples": [
+    {"input": ["[5,3,6,2,4,null,7]", "3"], "output": "[5,4,6,2,null,null,7]", "explanation": "3 has two children. Its in-order successor is 4: 4 takes 3's place and the node that held 4 is removed and freed."},
+    {"input": ["[5,3,6,2,4,null,7]", "0"], "output": "[5,3,6,2,4,null,7]", "explanation": "0 is not in the tree: nothing changes."},
+    {"input": ["[]", "0"], "output": "[]"}
+  ],
+  "hints": [
+    "First find the node, remembering how you got there (recursion returns the new subtree root).",
+    "No child or one child: the node is replaced by its only child (or NULL), and freed.",
+    "Two children: copy the smallest value of the right subtree into the node, then delete that value from the right subtree."
+  ],
+  "constraints": ["0 <= number of nodes <= 1000", "all values are distinct"],
+  "memory": "Free exactly the node that disappears from the tree. Don't allocate anything."
+}
+@@ description
+Delete the node with value `key` from the binary search tree (if it exists), free it, and return the root of the resulting tree.
+
+```c
+struct TreeNode *deleteNode(struct TreeNode *root, int key);
+```
+
+So that there is a single correct answer, use this rule:
+
+- If the node has **at most one child**, replace it by that child (or by `NULL`).
+- If it has **two children**, its value is replaced by its **in-order successor** (the smallest value in its right subtree), and the successor's node is removed instead.
+
+Exactly one node leaves the tree, and it must be freed.
+@@ prelude
+struct TreeNode {
+    int val;
+    struct TreeNode *left;
+    struct TreeNode *right;
+};
+struct TreeNode *deleteNode(struct TreeNode *root, int key);
+@@ starter
+#include <stdlib.h>
+
+/* struct TreeNode { int val; struct TreeNode *left; struct TreeNode *right; }; */
+
+struct TreeNode *deleteNode(struct TreeNode *root, int key) {
+    // TODO
+    return root;
+}
+@@ solution
+#include <stdlib.h>
+
+struct TreeNode *deleteNode(struct TreeNode *root, int key) {
+    if (root == NULL) return NULL;
+    if (key < root->val) {
+        root->left = deleteNode(root->left, key);
+    } else if (key > root->val) {
+        root->right = deleteNode(root->right, key);
+    } else if (root->left == NULL || root->right == NULL) {
+        struct TreeNode *child = root->left ? root->left : root->right;
+        free(root);
+        return child;
+    } else {
+        struct TreeNode *succ = root->right;
+        while (succ->left != NULL) succ = succ->left;
+        root->val = succ->val;
+        root->right = deleteNode(root->right, succ->val);
+    }
+    return root;
+}
+@@ driver
+#include "lc_driver.h"
+#define LC_WANT_TREE
+#include "lc_ds.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        struct TreeNode *root = lc_read_tree();
+        int key = lc_read_int();
+        long long before = lc_alloc_count();
+        root = deleteNode(root, key);
+        if (lc_alloc_count() != before) lc_fail("deleteNode allocated memory. Deleting only relinks and frees.");
+        lc_out_tree(root);
+        lc_free_tree(root, "a node of the tree returned by deleteNode()");
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[5]
+5
+
+[5,3,6,2,4,null,7]
+5
+
+[5,3,6,2,4,null,7]
+7
+
+[2,1]
+1
+
+[2,null,3]
+2
+
+[50,30,70,20,40,60,80,null,null,35,45]
+30
+
+[50,30,70,20,40,60,80]
+50
+@@ editorial
+## Approach: recursive delete with the successor rule
+
+```c
+struct TreeNode *deleteNode(struct TreeNode *root, int key) {
+    if (root == NULL) return NULL;                       // not found
+    if (key < root->val) {
+        root->left = deleteNode(root->left, key);
+    } else if (key > root->val) {
+        root->right = deleteNode(root->right, key);
+    } else if (root->left == NULL || root->right == NULL) {
+        struct TreeNode *child = root->left ? root->left : root->right;
+        free(root);                                      // this node leaves the tree
+        return child;                                    // the parent links to the child
+    } else {
+        struct TreeNode *succ = root->right;             // smallest in the right subtree
+        while (succ->left != NULL) succ = succ->left;
+        root->val = succ->val;                           // take its value
+        root->right = deleteNode(root->right, succ->val);   // and delete it there
+    }
+    return root;
+}
+```
+
+### Why the successor works
+The smallest value in the right subtree is larger than everything on the left and smaller than everything else on the right, so it can sit in the deleted node's place without breaking the BST order. It has no left child, so deleting it falls into the easy "at most one child" case.
+
+### Exactly one `free`
+In the two-children case the node holding `key` stays in the tree with a new value; the successor's node is the one freed (by the recursive call). Freeing `root` there too would leave the parent pointing at freed memory.
+
+**Complexity:** O(height) time, no extra memory besides the recursion.
+
+@@@ problem serialize-a-binary-tree
+@@ meta
+{
+  "title": "Serialize a Binary Tree",
+  "difficulty": "Medium",
+  "topics": ["Binary tree", "Strings", "realloc"],
+  "params": [{"name": "root", "type": "tree"}],
+  "examples": [
+    {"input": ["[1,2,3,null,null,4,5]"], "output": "\"1,2,#,#,3,4,#,#,5,#,#\"", "explanation": "Pre-order: each node prints its value, then its left subtree, then its right subtree; '#' stands for a missing child."},
+    {"input": ["[]"], "output": "\"#\""}
+  ],
+  "hints": [
+    "Write a recursive helper that appends to a growable buffer.",
+    "A value needs at most 11 characters (\"-2147483648\"); grow the buffer before each append if needed.",
+    "Separate tokens with commas: write a comma before every token except the first."
+  ],
+  "constraints": ["0 <= number of nodes <= 10^4", "-10^5 <= node values <= 10^5"],
+  "memory": "Return one `malloc`'d string; the caller frees it. Free any temporary buffers you use."
+}
+@@ description
+Turn a binary tree into a string, using a **pre-order** traversal: the node's value, then its left subtree, then its right subtree. Write `#` for a missing child, and separate all tokens with commas.
+
+```c
+char *serialize(const struct TreeNode *root);
+```
+
+```
+    1
+   / \
+  2   3        →  "1,2,#,#,3,4,#,#,5,#,#"
+     / \
+    4   5
+```
+
+You can't know the length of the result in advance without a first pass, so this is a good place for the growable buffer you built in *String Builder*.
+@@ prelude
+struct TreeNode {
+    int val;
+    struct TreeNode *left;
+    struct TreeNode *right;
+};
+char *serialize(const struct TreeNode *root);
+@@ starter
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* struct TreeNode { int val; struct TreeNode *left; struct TreeNode *right; }; */
+
+char *serialize(const struct TreeNode *root) {
+    // TODO
+    return NULL;
+}
+@@ solution
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct {
+    char *buf;
+    size_t len, cap;
+} Buf;
+
+static int put(Buf *b, const char *token) {
+    size_t n = strlen(token) + 1;              /* token plus a comma or '\0' */
+    if (b->len + n + 1 > b->cap) {
+        size_t cap = b->cap ? b->cap * 2 : 64;
+        while (cap < b->len + n + 1) cap *= 2;
+        char *bigger = realloc(b->buf, cap);
+        if (bigger == NULL) return 0;
+        b->buf = bigger;
+        b->cap = cap;
+    }
+    if (b->len > 0) b->buf[b->len++] = ',';
+    memcpy(b->buf + b->len, token, n);         /* copies the '\0' too */
+    b->len += n - 1;
+    return 1;
+}
+
+static int walk(Buf *b, const struct TreeNode *t) {
+    if (t == NULL) return put(b, "#");
+    char num[16];
+    snprintf(num, sizeof num, "%d", t->val);
+    return put(b, num) && walk(b, t->left) && walk(b, t->right);
+}
+
+char *serialize(const struct TreeNode *root) {
+    Buf b = { NULL, 0, 0 };
+    if (!walk(&b, root)) {
+        free(b.buf);
+        return NULL;
+    }
+    return b.buf;
+}
+@@ driver
+#include "lc_driver.h"
+#define LC_WANT_TREE
+#include "lc_ds.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        struct TreeNode *root = lc_read_tree();
+        char *s = serialize(root);
+        if (!s) {
+            lc_fail("serialize returned NULL.");
+            lc_out_null();
+        } else {
+            lc_out_str(s);
+            LC_FREE_RESULT(s, "the string returned by serialize()");
+        }
+        lc_free_tree(root, "a node of the input tree");
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[1]
+
+[-1,null,-2]
+
+[10,20,30,40,50,60,70]
+
+[100000,-100000]
+
+[1,2,null,3,null,4,null,5]
+@@ editorial
+## Approach: pre-order walk into a growable buffer
+
+```c
+typedef struct { char *buf; size_t len, cap; } Buf;
+
+static int put(Buf *b, const char *token) {          // append ",token"
+    size_t n = strlen(token) + 1;
+    if (b->len + n + 1 > b->cap) {                    // grow geometrically
+        size_t cap = b->cap ? b->cap * 2 : 64;
+        while (cap < b->len + n + 1) cap *= 2;
+        char *bigger = realloc(b->buf, cap);
+        if (bigger == NULL) return 0;
+        b->buf = bigger;
+        b->cap = cap;
+    }
+    if (b->len > 0) b->buf[b->len++] = ',';
+    memcpy(b->buf + b->len, token, n);                // includes the '\0'
+    b->len += n - 1;
+    return 1;
+}
+
+static int walk(Buf *b, const struct TreeNode *t) {
+    if (t == NULL) return put(b, "#");
+    char num[16];
+    snprintf(num, sizeof num, "%d", t->val);
+    return put(b, num) && walk(b, t->left) && walk(b, t->right);
+}
+
+char *serialize(const struct TreeNode *root) {
+    Buf b = { NULL, 0, 0 };
+    if (!walk(&b, root)) { free(b.buf); return NULL; }
+    return b.buf;                                     // ownership passes to the caller
+}
+```
+
+### Why pre-order with null markers?
+Pre-order plus explicit `#` markers determines the tree uniquely, so a matching `deserialize` can rebuild it by reading tokens in the same order. In-order alone can't: `[1,2]` and `[2,null,1]` give the same in-order sequence.
+
+### Returning the buffer itself
+The buffer was allocated by `realloc`, so it is a normal heap block. Returning it hands ownership to the caller. It may be up to 2x larger than needed; `realloc(b.buf, b.len + 1)` would trim it.
+
+**Complexity:** O(n) time, O(n) memory.

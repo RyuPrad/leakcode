@@ -1,0 +1,735 @@
+@@@ section
+{"id": "bughunt", "title": "Memory Bug Hunt", "summary": "Each starter compiles and almost works, but hides a classic memory bug. Run it, read the report, fix it."}
+
+@@@ problem fix-the-leak
+@@ meta
+{
+  "title": "Fix the Leak",
+  "difficulty": "Easy",
+  "topics": ["Bug hunt", "Memory leak"],
+  "kind": "bughunt",
+  "starterShould": "memory_leak",
+  "params": [{"name": "s", "type": "string"}],
+  "examples": [
+    {"input": ["\"hello\""], "output": "\"HELLO!\""},
+    {"input": ["\"\""], "output": "\"!\""}
+  ],
+  "hints": [
+    "Press Run: the leak report points at the line where the leaked block was allocated.",
+    "Which of the two blocks is returned to the caller, and which one is only used inside the function?",
+    "Free the temporary block once you are done with it, or avoid needing it at all."
+  ],
+  "constraints": ["0 <= strlen(s) <= 1000"],
+  "memory": "Return one new string; the caller frees it. Nothing else may remain allocated."
+}
+@@ description
+`shout` turns a string into an upper-case exclamation: `"hello"` → `"HELLO!"`.
+
+```c
+char *shout(const char *s);
+```
+
+The output is correct, yet the service using this function grows by a few bytes on every call until it runs out of memory. **Find and fix the leak.**
+
+Run the starter code first and read the memory report: it tells you how many bytes leaked and where they were allocated.
+@@ prelude
+char *shout(const char *s);
+@@ starter
+#include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
+
+char *shout(const char *s) {
+    size_t n = strlen(s);
+
+    char *upper = malloc(n + 1);
+    for (size_t i = 0; i < n; i++)
+        upper[i] = (char)toupper((unsigned char)s[i]);
+    upper[n] = '\0';
+
+    char *result = malloc(n + 2);
+    strcpy(result, upper);
+    strcat(result, "!");
+    return result;
+}
+@@ solution
+#include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
+
+char *shout(const char *s) {
+    size_t n = strlen(s);
+
+    char *upper = malloc(n + 1);
+    for (size_t i = 0; i < n; i++)
+        upper[i] = (char)toupper((unsigned char)s[i]);
+    upper[n] = '\0';
+
+    char *result = malloc(n + 2);
+    strcpy(result, upper);
+    strcat(result, "!");
+    free(upper);              /* the temporary is no longer needed */
+    return result;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        char *s = lc_read_str();
+        char *r;
+        lc_make_readonly(s);
+        r = shout(s);
+        lc_out_str(r);
+        if (r) LC_FREE_RESULT(r, "the string returned by shout()");
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+"Memory Leak"
+
+"c99"
+
+"Don't forget to free!"
+@@ editorial
+## The bug
+
+```c
+char *upper = malloc(n + 1);     // temporary
+...
+char *result = malloc(n + 2);    // returned to the caller
+...
+return result;                   // upper is never freed
+```
+
+Two blocks are allocated, but only `result` leaves the function. When `shout` returns, the local variable `upper` disappears, and with it the only pointer to its block. Nobody can ever free it again: a **leak** of `n + 1` bytes per call.
+
+## The fix
+
+Free the temporary once it has served its purpose:
+
+```c
+strcpy(result, upper);
+strcat(result, "!");
+free(upper);
+return result;
+```
+
+Better still, don't create it: write the upper-case characters straight into `result`:
+
+```c
+char *shout(const char *s) {
+    size_t n = strlen(s);
+    char *result = malloc(n + 2);
+    if (result == NULL) return NULL;
+    for (size_t i = 0; i < n; i++)
+        result[i] = (char)toupper((unsigned char)s[i]);
+    result[n] = '!';
+    result[n + 1] = '\0';
+    return result;
+}
+```
+
+### A habit that prevents leaks
+For every `malloc`, decide right away who will `free` it. A temporary is freed in the same function; a result is freed by the caller, and the function's documentation says so.
+
+@@@ problem fix-the-use-after-free
+@@ meta
+{
+  "title": "Fix the Use-After-Free",
+  "difficulty": "Easy",
+  "topics": ["Bug hunt", "Use after free", "Linked list"],
+  "kind": "bughunt",
+  "starterShould": "runtime_error:use_after_free",
+  "params": [{"name": "head", "type": "list"}],
+  "examples": [
+    {"input": ["[1,2,3]"], "output": "3", "explanation": "All three nodes are freed and the count is returned."},
+    {"input": ["[]"], "output": "0"}
+  ],
+  "hints": [
+    "Run it: the report says which line touched freed memory, where the block was freed, and where it was allocated.",
+    "In the for loop, when does p = p->next run: before or after free(p)?",
+    "Save the next pointer in a variable before freeing the node."
+  ],
+  "constraints": ["0 <= number of nodes <= 5000"],
+  "memory": "Free every node exactly once and return how many were freed."
+}
+@@ description
+`destroyList` frees every node of a linked list and returns how many nodes it freed.
+
+```c
+int destroyList(struct ListNode *head);
+```
+
+On the developer's machine it "works": the program printed the right count and didn't crash. On another machine it crashes randomly. **Find and fix the bug.**
+
+Programs with this bug often appear to work because freed memory usually still holds its old contents for a while. LeakCode makes freed memory inaccessible, so the bug shows up every time, on the exact line that commits it.
+@@ prelude
+struct ListNode {
+    int val;
+    struct ListNode *next;
+};
+int destroyList(struct ListNode *head);
+@@ starter
+#include <stdlib.h>
+
+/* struct ListNode { int val; struct ListNode *next; }; */
+
+int destroyList(struct ListNode *head) {
+    int count = 0;
+    for (struct ListNode *p = head; p != NULL; p = p->next) {
+        free(p);
+        count++;
+    }
+    return count;
+}
+@@ solution
+#include <stdlib.h>
+
+int destroyList(struct ListNode *head) {
+    int count = 0;
+    while (head != NULL) {
+        struct ListNode *next = head->next;   /* read it while the node is still ours */
+        free(head);
+        head = next;
+        count++;
+    }
+    return count;
+}
+@@ driver
+#include "lc_driver.h"
+#define LC_WANT_LIST
+#include "lc_ds.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        struct ListNode *head = lc_read_list();
+        lc_out_int(destroyList(head));
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[7]
+
+[1,2,3,4,5,6,7,8,9,10]
+
+[5,5,5,5,5]
+@@ editorial
+## The bug
+
+```c
+for (struct ListNode *p = head; p != NULL; p = p->next) {
+    free(p);
+    count++;
+}
+```
+
+A `for` loop runs its increment (`p = p->next`) **after** the body. By then `p` has been freed, so `p->next` reads memory the program no longer owns. With a normal allocator the old bytes are often still there, which is why the bug hides, until the allocator reuses the block and `next` becomes garbage.
+
+## The fix
+
+Read `next` before freeing:
+
+```c
+int destroyList(struct ListNode *head) {
+    int count = 0;
+    while (head != NULL) {
+        struct ListNode *next = head->next;   // save first
+        free(head);                           // then free
+        head = next;
+        count++;
+    }
+    return count;
+}
+```
+
+### The general rule
+After `free(p)`, treat `p` as poison: no reads, no writes, no `p->anything`. A common defensive habit is `free(p); p = NULL;`, which turns a silent use-after-free into an immediate NULL dereference.
+
+@@@ problem fix-the-off-by-one
+@@ meta
+{
+  "title": "Fix the Off-by-One",
+  "difficulty": "Easy",
+  "topics": ["Bug hunt", "Heap overflow", "Strings"],
+  "kind": "bughunt",
+  "starterShould": "runtime_error:heap_overflow",
+  "params": [{"name": "c", "type": "char"}, {"name": "n", "type": "int"}],
+  "examples": [
+    {"input": ["\"a\"", "4"], "output": "\"aaaa\""},
+    {"input": ["\"x\"", "0"], "output": "\"\"", "explanation": "Zero repetitions: the empty string, which still needs one byte for '\\0'."}
+  ],
+  "hints": [
+    "Run it and look at the heap overflow report: how big is the block, and at which offset was it written?",
+    "How many bytes does a string of n characters need?"
+  ],
+  "constraints": ["0 <= n <= 1000"],
+  "memory": "Return a new string of exactly n characters; the caller frees it."
+}
+@@ description
+`repeatChar(c, n)` returns a string made of `n` copies of `c`.
+
+```c
+char *repeatChar(char c, int n);
+```
+
+It passes every test on the author's machine, yet a security audit flagged it as a **heap buffer overflow**. **Find and fix the bug.**
+
+Small overflows like this one rarely crash on their own: the extra byte lands in memory the allocator happens not to be using right now, or silently corrupts a neighbouring block. LeakCode places every block right before an inaccessible page, so even a single byte past the end is caught.
+@@ prelude
+char *repeatChar(char c, int n);
+@@ starter
+#include <stdlib.h>
+
+char *repeatChar(char c, int n) {
+    char *s = malloc(n);
+    for (int i = 0; i < n; i++)
+        s[i] = c;
+    s[n] = '\0';
+    return s;
+}
+@@ solution
+#include <stdlib.h>
+
+char *repeatChar(char c, int n) {
+    char *s = malloc((size_t)n + 1);      /* n characters + the '\0' */
+    if (s == NULL) return NULL;
+    for (int i = 0; i < n; i++)
+        s[i] = c;
+    s[n] = '\0';
+    return s;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        char *c = lc_read_str();
+        int n = lc_read_int();
+        char *s;
+        if (!c || strlen(c) != 1 || n < 0) lc_abort_case("Invalid test case", "c must be one character and n >= 0.");
+        s = repeatChar(c[0], n);
+        lc_out_str(s);
+        if (s) LC_FREE_RESULT(s, "the string returned by repeatChar()");
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+"z"
+1
+
+"-"
+20
+
+"#"
+7
+@@ editorial
+## The bug
+
+```c
+char *s = malloc(n);   // room for n bytes: indices 0 .. n-1
+...
+s[n] = '\0';           // index n is one past the end
+```
+
+`n` characters plus the terminator need `n + 1` bytes. The block is one byte too small, and `s[n] = '\0'` writes past its end.
+
+## The fix
+
+```c
+char *s = malloc((size_t)n + 1);
+```
+
+### Why didn't it crash before?
+`malloc` usually rounds sizes up (to 8 or 16 bytes), so the extra byte often lands in padding nobody uses. The program is still wrong: when `n` happens to be a multiple of 16 the byte hits the next block's header, and the crash appears far away from the bug, much later. Tools like LeakCode's guard pages (or AddressSanitizer and Valgrind) exist to catch exactly this.
+
+### Rule of thumb
+Whenever you allocate for a string, write the `+ 1` immediately, and say why: `malloc(len + 1)  /* + '\0' */`.
+
+@@@ problem fix-the-dangling-pointer
+@@ meta
+{
+  "title": "Fix the Dangling Pointer",
+  "difficulty": "Easy",
+  "topics": ["Bug hunt", "Stack vs heap", "Dangling pointer"],
+  "kind": "bughunt",
+  "starterShould": "runtime_error:invalid_free",
+  "params": [{"name": "prefix", "type": "string"}, {"name": "id", "type": "int"}],
+  "examples": [
+    {"input": ["\"item\"", "7"], "output": "\"item-7\""},
+    {"input": ["\"user\"", "42"], "output": "\"user-42\""}
+  ],
+  "hints": [
+    "Look at the compiler warnings in the result panel.",
+    "Where does buf live, and what happens to it when makeLabel returns?",
+    "The caller frees the result, so the result must come from malloc. snprintf(NULL, 0, ...) tells you how many bytes to allocate."
+  ],
+  "constraints": ["0 <= strlen(prefix) <= 100", "-10^9 <= id <= 10^9"],
+  "memory": "Return a new string from `malloc`; the caller frees it."
+}
+@@ description
+`makeLabel("item", 7)` should return the new string `"item-7"`, which the caller frees.
+
+```c
+char *makeLabel(const char *prefix, int id);
+```
+
+Sometimes the label prints correctly, sometimes it is garbage, and the program crashes when the caller frees it. **Find and fix the bug.**
+
+Read the compiler warnings: this time the compiler noticed the problem before the program even ran.
+@@ prelude
+char *makeLabel(const char *prefix, int id);
+@@ starter
+#include <stdio.h>
+#include <stdlib.h>
+
+char *makeLabel(const char *prefix, int id) {
+    char buf[64];
+    snprintf(buf, sizeof buf, "%s-%d", prefix, id);
+    return buf;
+}
+@@ solution
+#include <stdio.h>
+#include <stdlib.h>
+
+char *makeLabel(const char *prefix, int id) {
+    int len = snprintf(NULL, 0, "%s-%d", prefix, id);   /* measure */
+    char *label = malloc((size_t)len + 1);
+    if (label == NULL) return NULL;
+    snprintf(label, (size_t)len + 1, "%s-%d", prefix, id);
+    return label;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        char *prefix = lc_read_str();
+        int id = lc_read_int();
+        char *label;
+        lc_make_readonly(prefix);
+        label = makeLabel(prefix, id);
+        lc_out_str(label);
+        if (label) LC_FREE_RESULT(label, "the string returned by makeLabel()");
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+"node"
+12345
+
+"x"
+-1
+
+""
+0
+
+"a-very-long-prefix-that-would-not-fit-into-a-small-local-buffer-at-all"
+1000000000
+@@ editorial
+## The bug
+
+```c
+char buf[64];              // lives in makeLabel's stack frame
+...
+return buf;                // returns its address
+```
+
+`buf` is a local array: it exists only while `makeLabel` runs. After `return`, its stack space is reused by the next function call, so the caller holds a **dangling pointer** into memory that is no longer reserved for it. Printing it shows the label only if nothing overwrote it yet, and freeing it is invalid because it never came from `malloc`. MSVC warns about it: *C4172: returning address of local variable or temporary*.
+
+## The fix
+
+Return heap memory, sized exactly:
+
+```c
+char *makeLabel(const char *prefix, int id) {
+    int len = snprintf(NULL, 0, "%s-%d", prefix, id);   // how long will it be?
+    char *label = malloc((size_t)len + 1);
+    if (label == NULL) return NULL;
+    snprintf(label, (size_t)len + 1, "%s-%d", prefix, id);
+    return label;
+}
+```
+
+The fixed version also handles prefixes longer than 64 characters, which the original would silently have truncated.
+
+### Other valid designs
+- Let the **caller** provide the buffer: `int makeLabel(char *out, size_t outSize, ...)`, the way `snprintf` itself works.
+- A `static char buf[64]` would not dangle, but every call overwrites the previous result and the caller must not free it. Functions like `strtok` and `asctime` work this way, and it causes its own bugs.
+
+@@@ problem fix-the-shallow-copy
+@@ meta
+{
+  "title": "Fix the Shallow Copy",
+  "difficulty": "Medium",
+  "topics": ["Bug hunt", "Double free", "Deep copy"],
+  "kind": "bughunt",
+  "starterShould": "runtime_error:double_free",
+  "params": [{"name": "name", "type": "string"}, {"name": "email", "type": "string"}],
+  "examples": [
+    {"input": ["\"Ada Lovelace\"", "\"ada@example.com\""], "output": "[\"Ada Lovelace\",\"ada@example.com\",\"Ada Lovelace\",\"ada@example.com\"]", "explanation": "The harness creates a contact, copies it, prints both, then frees both with contactFree."}
+  ],
+  "hints": [
+    "Run it: the double free report shows where the block was freed the first time, and where again.",
+    "After *copy = *c, where do copy->name and c->name point?",
+    "A copy that will be freed separately needs its own copies of the strings: strdup them."
+  ],
+  "constraints": ["0 <= strlen(name), strlen(email) <= 100"],
+  "memory": "`contactCopy` must return a contact that can be freed with `contactFree` independently of the original."
+}
+@@ description
+A tiny address book stores contacts like this:
+
+```c
+typedef struct Contact {
+    char *name;
+    char *email;
+} Contact;
+
+Contact *contactCreate(const char *name, const char *email);
+Contact *contactCopy(const Contact *c);   // an independent copy
+void contactFree(Contact *c);
+```
+
+The harness creates a contact, copies it, prints both, and frees both. The program crashes when freeing the second contact. **Find and fix the bug.**
+
+This is the most common way C programs end up freeing the same memory twice: two objects that each believe they own the same block.
+@@ prelude
+typedef struct Contact {
+    char *name;
+    char *email;
+} Contact;
+Contact *contactCreate(const char *name, const char *email);
+Contact *contactCopy(const Contact *c);
+void contactFree(Contact *c);
+@@ starter
+#include <stdlib.h>
+#include <string.h>
+
+Contact *contactCreate(const char *name, const char *email) {
+    Contact *c = malloc(sizeof *c);
+    c->name = strdup(name);
+    c->email = strdup(email);
+    return c;
+}
+
+/* Returns an independent copy that the caller frees with contactFree. */
+Contact *contactCopy(const Contact *c) {
+    Contact *copy = malloc(sizeof *copy);
+    *copy = *c;
+    return copy;
+}
+
+void contactFree(Contact *c) {
+    free(c->name);
+    free(c->email);
+    free(c);
+}
+@@ solution
+#include <stdlib.h>
+#include <string.h>
+
+Contact *contactCreate(const char *name, const char *email) {
+    Contact *c = malloc(sizeof *c);
+    c->name = strdup(name);
+    c->email = strdup(email);
+    return c;
+}
+
+Contact *contactCopy(const Contact *c) {
+    /* a deep copy: new strings, not shared pointers */
+    return contactCreate(c->name, c->email);
+}
+
+void contactFree(Contact *c) {
+    free(c->name);
+    free(c->email);
+    free(c);
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        char *name = lc_read_str(), *email = lc_read_str();
+        Contact *a, *b;
+        lc_make_readonly(name);
+        lc_make_readonly(email);
+        a = contactCreate(name, email);
+        b = contactCopy(a);
+        if (!a || !b) {
+            lc_fail("contactCreate and contactCopy must return a contact.");
+            lc_out_null();
+            lc_end_case();
+            continue;
+        }
+        if (a == b) lc_fail("contactCopy returned the original contact instead of a copy.");
+        lc_out_begin();
+        lc_out_str(a->name);
+        lc_out_str(a->email);
+        lc_out_str(b->name);
+        lc_out_str(b->email);
+        lc_out_end();
+        contactFree(a);
+        if (a != b) contactFree(b);
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+"Linus"
+"linus@example.org"
+
+""
+""
+
+"Grace Hopper"
+"grace@example.mil"
+@@ editorial
+## The bug
+
+```c
+Contact *copy = malloc(sizeof *copy);
+*copy = *c;      // copies the two POINTERS, not the strings
+```
+
+Assigning a struct copies its members. The members are pointers, so `copy->name` and `c->name` now point to the **same** string. Both contacts believe they own it: `contactFree(original)` frees the strings, and `contactFree(copy)` frees them again. That is a double free, which corrupts the heap in a normal program.
+
+## The fix: a deep copy
+
+```c
+Contact *contactCopy(const Contact *c) {
+    return contactCreate(c->name, c->email);   // new strings for the copy
+}
+```
+
+### Shallow vs deep copies in C
+C has no copy constructors: `=` on a struct is always a shallow, member-by-member copy. That is perfect for structs holding plain values (`int`, `double`, fixed arrays), and wrong for structs that *own* heap memory through pointers. For those, write an explicit copy function, and keep the ownership rule simple: each object frees exactly what it allocated.
+
+@@@ problem fix-the-realloc-bug
+@@ meta
+{
+  "title": "Fix the realloc Bug",
+  "difficulty": "Medium",
+  "topics": ["Bug hunt", "realloc", "Use after free"],
+  "kind": "bughunt",
+  "starterShould": "runtime_error:use_after_free",
+  "params": [{"name": "initial", "type": "int[]"}, {"name": "values", "type": "int[]"}],
+  "examples": [
+    {"input": ["[1,2,3]", "[4,5]"], "output": "[1,2,3,4,5]", "explanation": "The harness puts [1,2,3] in a malloc'd array, then calls arr = appendValue(arr, &size, v) for 4 and for 5."},
+    {"input": ["[]", "[7]"], "output": "[7]"}
+  ],
+  "hints": [
+    "Run it: the report says the write hit a block that was \"moved by realloc()\".",
+    "realloc may move the block. Where is the new block, and what happens to the old one?",
+    "Use realloc's return value, and keep the old pointer until you know realloc succeeded."
+  ],
+  "constraints": ["0 <= initial length, values length <= 1000"],
+  "memory": "Return the array's current address (it may have moved). The caller frees it at the end."
+}
+@@ description
+`appendValue` adds one element to the end of a heap array and returns the array.
+
+```c
+int *appendValue(int *arr, int *size, int value);
+```
+
+It is used like this:
+
+```c
+int size = 3;
+int *arr = malloc(3 * sizeof *arr);   /* ... filled with data ... */
+arr = appendValue(arr, &size, 4);
+arr = appendValue(arr, &size, 5);
+free(arr);
+```
+
+On the developer's machine it worked perfectly for small arrays and crashed for big ones. **Find and fix the bug.**
+
+LeakCode's `realloc` *always* moves the block (a real allocator does so only when it can't grow it in place), so code that depends on the block staying put fails every time instead of only occasionally.
+@@ prelude
+int *appendValue(int *arr, int *size, int value);
+@@ starter
+#include <stdlib.h>
+
+int *appendValue(int *arr, int *size, int value) {
+    realloc(arr, (*size + 1) * sizeof *arr);
+    arr[*size] = value;
+    (*size)++;
+    return arr;
+}
+@@ solution
+#include <stdlib.h>
+
+int *appendValue(int *arr, int *size, int value) {
+    int *bigger = realloc(arr, (*size + 1) * sizeof *arr);
+    if (bigger == NULL) return arr;     /* out of memory: arr is untouched and still valid */
+    bigger[*size] = value;
+    (*size)++;
+    return bigger;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int n, m, i, size;
+        int *init = lc_read_int_array(&n);
+        int *vals = lc_read_int_array(&m);
+        int *arr = (int *)malloc((size_t)n * sizeof *arr);
+        for (i = 0; i < n; i++) arr[i] = init[i];
+        size = n;
+        for (i = 0; i < m; i++) arr = appendValue(arr, &size, vals[i]);
+        if (size != n + m) lc_fail("size is %d after %d appends to %d elements.", size, m, n);
+        lc_out_int_array(arr, size);
+        LC_FREE_RESULT(arr, "the array returned by appendValue()");
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[9]
+[]
+
+[1]
+[2,3,4,5,6,7,8,9,10]
+
+[10,20]
+[30]
+@@ editorial
+## The bug
+
+```c
+realloc(arr, (*size + 1) * sizeof *arr);   // result thrown away
+arr[*size] = value;                        // arr may point to the OLD block
+```
+
+`realloc` either grows the block in place, or allocates a new block, copies the data, **frees the old block** and returns the new address. The starter ignores the return value, so after a move it writes into freed memory and returns a dangling pointer. On top of that, the new block is leaked.
+
+## The fix
+
+```c
+int *appendValue(int *arr, int *size, int value) {
+    int *bigger = realloc(arr, (*size + 1) * sizeof *arr);
+    if (bigger == NULL) return arr;   // the old block is still valid
+    bigger[*size] = value;
+    (*size)++;
+    return bigger;
+}
+```
+
+### Why not `arr = realloc(arr, ...)`?
+If `realloc` fails it returns `NULL` *and leaves the old block alone*. Writing `arr = realloc(arr, n)` overwrites your only pointer to that block with `NULL`, which leaks it. Store the result in a temporary first.
+
+### Performance note
+Growing by one element per call copies the whole array every time: n appends cost O(n²). The *Dynamic Array* problem shows how geometric growth fixes that.

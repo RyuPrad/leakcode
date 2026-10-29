@@ -1,0 +1,578 @@
+@@@ section
+{"id": "2d", "title": "Arrays of Pointers & 2D Memory", "summary": "Matrices, jagged arrays and string arrays: memory with several levels of ownership, and freeing it in the right order."}
+
+@@@ problem allocate-a-matrix
+@@ meta
+{
+  "title": "Allocate and Free a Matrix",
+  "difficulty": "Easy",
+  "topics": ["malloc", "2D arrays", "free"],
+  "params": [{"name": "rows", "type": "int"}, {"name": "cols", "type": "int"}, {"name": "value", "type": "int"}],
+  "examples": [
+    {"input": ["2", "3", "7"], "output": "[[7,7,7],[7,7,7]]", "explanation": "createMatrix(2, 3, 7) builds the matrix; then the harness calls your freeMatrix and checks that nothing leaked."},
+    {"input": ["1", "1", "0"], "output": "[[0]]"}
+  ],
+  "hints": [
+    "One allocation for the array of row pointers, plus one per row.",
+    "freeMatrix must free every row first, then the array of row pointers.",
+    "If you free the row array first, reading matrix[r] afterwards is a use-after-free."
+  ],
+  "constraints": ["1 <= rows, cols <= 100"],
+  "memory": "`createMatrix` allocates; `freeMatrix` must release **everything** `createMatrix` allocated. Any block left over is reported as a leak."
+}
+@@ description
+Write a pair of functions: one that builds a `rows x cols` matrix of `int`s filled with `value`, and one that destroys it.
+
+```c
+int **createMatrix(int rows, int cols, int value);
+void freeMatrix(int **matrix, int rows);
+```
+
+The harness calls `createMatrix`, prints the matrix through `matrix[r][c]`, then calls **your** `freeMatrix` and checks that every byte was returned.
+
+The usual layout is an **array of row pointers**: `matrix` points to `rows` pointers, and `matrix[r]` points to that row's `cols` integers. So `matrix[r][c]` first follows `matrix[r]`, then indexes into the row.
+
+Pairs like `create`/`free`, `open`/`close` or `init`/`destroy` are how C libraries hand out resources: whoever calls `create` must eventually call the matching `free`, and only that function knows how the memory was laid out.
+@@ prelude
+int **createMatrix(int rows, int cols, int value);
+void freeMatrix(int **matrix, int rows);
+@@ starter
+#include <stdlib.h>
+
+int **createMatrix(int rows, int cols, int value) {
+    // TODO: allocate the row pointers, then each row.
+    return NULL;
+}
+
+void freeMatrix(int **matrix, int rows) {
+    // TODO: free what createMatrix allocated.
+}
+@@ solution
+#include <stdlib.h>
+
+int **createMatrix(int rows, int cols, int value) {
+    int **m = malloc(rows * sizeof *m);
+    if (m == NULL) return NULL;
+    for (int r = 0; r < rows; r++) {
+        m[r] = malloc(cols * sizeof *m[r]);
+        if (m[r] == NULL) {
+            while (r-- > 0) free(m[r]);     /* undo what was allocated */
+            free(m);
+            return NULL;
+        }
+        for (int c = 0; c < cols; c++)
+            m[r][c] = value;
+    }
+    return m;
+}
+
+void freeMatrix(int **matrix, int rows) {
+    if (matrix == NULL) return;
+    for (int r = 0; r < rows; r++)
+        free(matrix[r]);
+    free(matrix);
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int rows = lc_read_int(), cols = lc_read_int(), value = lc_read_int();
+        int **m = createMatrix(rows, cols, value);
+        int r;
+        if (!m) {
+            lc_fail("createMatrix returned NULL.");
+            lc_out_null();
+        } else {
+            lc_out_begin();
+            for (r = 0; r < rows; r++) lc_out_int_array(m[r], cols);
+            lc_out_end();
+            freeMatrix(m, rows);
+        }
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+3
+1
+-1
+
+4
+4
+9
+
+1
+10
+5
+
+10
+1
+2
+
+5
+5
+0
+@@ editorial
+## Approach: one block for the row pointers, one block per row
+
+```c
+int **createMatrix(int rows, int cols, int value) {
+    int **m = malloc(rows * sizeof *m);          // rows pointers
+    if (m == NULL) return NULL;
+    for (int r = 0; r < rows; r++) {
+        m[r] = malloc(cols * sizeof *m[r]);      // cols ints
+        if (m[r] == NULL) {                      // clean up a partial matrix
+            while (r-- > 0) free(m[r]);
+            free(m);
+            return NULL;
+        }
+        for (int c = 0; c < cols; c++) m[r][c] = value;
+    }
+    return m;
+}
+
+void freeMatrix(int **matrix, int rows) {
+    if (matrix == NULL) return;
+    for (int r = 0; r < rows; r++)
+        free(matrix[r]);     // rows first: we still need matrix[r]
+    free(matrix);            // then the array that held them
+}
+```
+
+### Order matters
+Freeing `matrix` first and then reading `matrix[r]` reads freed memory. Free *contents before containers*.
+
+### Alternative: a single block
+```c
+int **m = malloc(rows * sizeof(int *) + rows * cols * sizeof(int));
+int *data = (int *)(m + rows);                  // ints start after the pointers
+for (int r = 0; r < rows; r++) m[r] = data + r * cols;
+/* freeMatrix is then just free(m) */
+```
+One allocation is faster and can't partially fail, but only the code that created it knows it must be freed with a single `free`, which is exactly why the library provides `freeMatrix`.
+
+### `sizeof *m` vs `sizeof *m[r]`
+`*m` is an `int *` (8 bytes) and `*m[r]` is an `int` (4 bytes). Mixing them up allocates the wrong amount without any compiler warning.
+
+**Complexity:** O(rows * cols) time and memory.
+
+@@@ problem transpose-matrix
+@@ meta
+{
+  "title": "Transpose a Matrix (LeetCode Style)",
+  "difficulty": "Medium",
+  "topics": ["2D arrays", "malloc", "LeetCode conventions"],
+  "params": [{"name": "matrix", "type": "int[][]"}],
+  "examples": [
+    {"input": ["[[1,2,3],[4,5,6]]"], "output": "[[1,4],[2,5],[3,6]]", "explanation": "A 2x3 matrix becomes 3x2: *returnSize = 3 and every (*returnColumnSizes)[i] = 2."},
+    {"input": ["[[1]]"], "output": "[[1]]"}
+  ],
+  "hints": [
+    "The result has cols rows and rows columns: result[c][r] = matrix[r][c].",
+    "*returnColumnSizes must point to a malloc'd array of *returnSize ints.",
+    "Allocate: the row array, each row, and the column-sizes array. That is cols + 2 allocations."
+  ],
+  "constraints": ["1 <= matrixSize <= 100", "1 <= matrixColSize[i] <= 100", "all rows have the same length"],
+  "memory": "Return a newly allocated matrix. Set `*returnSize` to its number of rows and `*returnColumnSizes` to a newly allocated array of row lengths. The caller frees every row, the row array, and the column-sizes array."
+}
+@@ description
+Return the **transpose** of `matrix`: rows become columns.
+
+```c
+int **transpose(int **matrix, int matrixSize, int *matrixColSize,
+                int *returnSize, int **returnColumnSizes);
+```
+
+This is exactly how LeetCode passes and returns 2D arrays in C, so it is worth learning once:
+
+| Parameter | Meaning |
+|---|---|
+| `matrix`, `matrixSize` | the input rows and how many there are |
+| `matrixColSize` | an array: `matrixColSize[i]` is the length of row `i` |
+| `*returnSize` | **you** set it: the number of rows you return |
+| `*returnColumnSizes` | **you** set it to a `malloc`'d array holding each returned row's length |
+
+`int **returnColumnSizes` is a pointer to the caller's `int *` variable, so you write `*returnColumnSizes = malloc(...)` to hand the array back.
+@@ prelude
+int **transpose(int **matrix, int matrixSize, int *matrixColSize, int *returnSize, int **returnColumnSizes);
+@@ starter
+#include <stdlib.h>
+
+int **transpose(int **matrix, int matrixSize, int *matrixColSize,
+                int *returnSize, int **returnColumnSizes) {
+    // TODO
+    *returnSize = 0;
+    *returnColumnSizes = NULL;
+    return NULL;
+}
+@@ solution
+#include <stdlib.h>
+
+int **transpose(int **matrix, int matrixSize, int *matrixColSize,
+                int *returnSize, int **returnColumnSizes) {
+    int rows = matrixSize, cols = matrixColSize[0];
+    int **t = malloc(cols * sizeof *t);
+    int *sizes = malloc(cols * sizeof *sizes);
+    for (int c = 0; c < cols; c++) {
+        t[c] = malloc(rows * sizeof *t[c]);
+        sizes[c] = rows;
+        for (int r = 0; r < rows; r++)
+            t[c][r] = matrix[r][c];
+    }
+    *returnSize = cols;
+    *returnColumnSizes = sizes;
+    return t;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int rows, *cols, r, rs = -1, *rcs = NULL;
+        int **m = lc_read_int_matrix(&rows, &cols);
+        int **t;
+        for (r = 0; r < rows; r++) lc_make_readonly(m[r]);
+        lc_make_readonly(m);
+        lc_make_readonly(cols);
+        t = transpose(m, rows, cols, &rs, &rcs);
+        if (rs < 0 || (rs > 0 && (!t || !rcs))) {
+            lc_fail("Set *returnSize and *returnColumnSizes, and return the matrix.");
+            lc_out_null();
+        } else {
+            lc_out_begin();
+            for (r = 0; r < rs; r++) lc_out_int_array(t[r], rcs[r]);
+            lc_out_end();
+            for (r = 0; r < rs; r++) LC_FREE_RESULT(t[r], "a row of the matrix returned by transpose()");
+        }
+        if (t) LC_FREE_RESULT(t, "the row array returned by transpose()");
+        if (rcs) LC_FREE_RESULT(rcs, "the *returnColumnSizes array");
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[[1,2],[3,4]]
+
+[[1],[2],[3]]
+
+[[5,6,7,8]]
+
+[[-1,0],[0,-1],[2,2]]
+
+[[1,2,3,4],[5,6,7,8],[9,10,11,12]]
+@@ editorial
+## Approach: allocate cols rows of length rows
+
+```c
+int **transpose(int **matrix, int matrixSize, int *matrixColSize,
+                int *returnSize, int **returnColumnSizes) {
+    int rows = matrixSize, cols = matrixColSize[0];
+    int **t = malloc(cols * sizeof *t);
+    int *sizes = malloc(cols * sizeof *sizes);
+    for (int c = 0; c < cols; c++) {
+        t[c] = malloc(rows * sizeof *t[c]);
+        sizes[c] = rows;
+        for (int r = 0; r < rows; r++)
+            t[c][r] = matrix[r][c];
+    }
+    *returnSize = cols;
+    *returnColumnSizes = sizes;      // hand the array to the caller
+    return t;
+}
+```
+
+### Reading the signature
+- `int *returnSize`: the caller's `int`. You write the count through it.
+- `int **returnColumnSizes`: the caller's `int *`. You write a *pointer* through it.
+
+In the caller it looks like this:
+```c
+int rs, *colSizes;
+int **t = transpose(m, rows, cols, &rs, &colSizes);
+/* ... use t ... */
+for (int i = 0; i < rs; i++) free(t[i]);
+free(t);
+free(colSizes);
+```
+
+(For brevity the solution skips the `NULL` checks after `malloc`. Production code should check each one, as in *Allocate and Free a Matrix*.)
+
+**Complexity:** O(rows * cols) time and memory.
+
+@@@ problem split-a-string
+@@ meta
+{
+  "title": "Split a String",
+  "difficulty": "Medium",
+  "topics": ["Strings", "Arrays of pointers", "malloc"],
+  "params": [{"name": "s", "type": "string"}, {"name": "delim", "type": "char"}],
+  "examples": [
+    {"input": ["\"a,b,c\"", "\",\""], "output": "[\"a\",\"b\",\"c\"]"},
+    {"input": ["\"a,,b\"", "\",\""], "output": "[\"a\",\"\",\"b\"]", "explanation": "Two delimiters in a row produce an empty token."},
+    {"input": ["\"\"", "\",\""], "output": "[\"\"]", "explanation": "No delimiter: one token, the whole (empty) string."}
+  ],
+  "hints": [
+    "The number of tokens is (number of delimiters) + 1. Count them first to size the array.",
+    "Each token is a separate malloc'd string of length (end - start) + 1.",
+    "Don't use strtok: it modifies its input (and s is const) and skips empty tokens."
+  ],
+  "constraints": ["0 <= strlen(s) <= 10^4"],
+  "memory": "Return a `malloc`'d array of `*returnSize` pointers, each pointing to its own `malloc`'d string. The caller frees every token, then the array."
+}
+@@ description
+Split `s` at every occurrence of the character `delim` and return the pieces.
+
+```c
+char **splitString(const char *s, char delim, int *returnSize);
+```
+
+- Every delimiter separates two tokens, so `k` delimiters give `k + 1` tokens (some may be empty).
+- Each token must be its **own** heap string, and the array of pointers must be its own block too. The caller frees each token and then the array.
+- `s` is read-only.
+
+The result has two levels of ownership: the array owns the token pointers, and each token owns its characters.
+@@ prelude
+char **splitString(const char *s, char delim, int *returnSize);
+@@ starter
+#include <stdlib.h>
+#include <string.h>
+
+char **splitString(const char *s, char delim, int *returnSize) {
+    // TODO
+    *returnSize = 0;
+    return NULL;
+}
+@@ solution
+#include <stdlib.h>
+#include <string.h>
+
+char **splitString(const char *s, char delim, int *returnSize) {
+    int count = 1;
+    for (const char *p = s; *p; p++)
+        if (*p == delim) count++;
+    char **tokens = malloc(count * sizeof *tokens);
+    int k = 0;
+    const char *start = s;
+    for (const char *p = s; ; p++) {
+        if (*p == delim || *p == '\0') {
+            size_t len = (size_t)(p - start);
+            tokens[k] = malloc(len + 1);
+            memcpy(tokens[k], start, len);
+            tokens[k][len] = '\0';
+            k++;
+            if (*p == '\0') break;
+            start = p + 1;
+        }
+    }
+    *returnSize = count;
+    return tokens;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        char *s = lc_read_str();
+        char *d = lc_read_str();
+        int count = -1, i;
+        char **tokens;
+        if (!d || strlen(d) != 1) lc_abort_case("Invalid test case", "delim must be a single character.");
+        lc_make_readonly(s);
+        tokens = splitString(s, d[0], &count);
+        if (count < 0 || (count > 0 && !tokens)) {
+            lc_fail("Set *returnSize and return the array of tokens.");
+            lc_out_null();
+        } else {
+            lc_out_str_array(tokens, count);
+            for (i = 0; i < count; i++) LC_FREE_RESULT(tokens[i], "a token returned by splitString()");
+        }
+        if (tokens) LC_FREE_RESULT(tokens, "the token array returned by splitString()");
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+",start"
+","
+
+"end,"
+","
+
+"no delimiters here"
+","
+
+"one two  three"
+" "
+
+"2026-10-29"
+"-"
+
+",,,"
+","
+
+"key=value"
+"="
+@@ editorial
+## Approach: count, then cut
+
+```c
+char **splitString(const char *s, char delim, int *returnSize) {
+    int count = 1;
+    for (const char *p = s; *p; p++)
+        if (*p == delim) count++;
+    char **tokens = malloc(count * sizeof *tokens);
+    int k = 0;
+    const char *start = s;                    // start of the current token
+    for (const char *p = s; ; p++) {
+        if (*p == delim || *p == '\0') {      // the current token ends at p
+            size_t len = (size_t)(p - start);
+            tokens[k] = malloc(len + 1);
+            memcpy(tokens[k], start, len);
+            tokens[k][len] = '\0';
+            k++;
+            if (*p == '\0') break;
+            start = p + 1;
+        }
+    }
+    *returnSize = count;
+    return tokens;
+}
+```
+
+### Why not `strtok`?
+`strtok` writes `'\0'` into the string it scans (impossible on a `const char *` or a literal), keeps hidden global state between calls, and treats consecutive delimiters as one, so empty tokens disappear. It is best avoided.
+
+### Freeing the result
+```c
+for (int i = 0; i < n; i++) free(tokens[i]);
+free(tokens);
+```
+Freeing only `tokens` leaks every string; freeing the strings after `tokens` reads freed memory.
+
+**Complexity:** O(n) time and memory.
+
+@@@ problem pascals-triangle
+@@ meta
+{
+  "title": "Pascal's Triangle",
+  "difficulty": "Medium",
+  "topics": ["Jagged arrays", "malloc", "LeetCode conventions"],
+  "params": [{"name": "numRows", "type": "int"}],
+  "examples": [
+    {"input": ["5"], "output": "[[1],[1,1],[1,2,1],[1,3,3,1],[1,4,6,4,1]]", "explanation": "Row i has i + 1 numbers; inner numbers are the sum of the two above."},
+    {"input": ["1"], "output": "[[1]]"}
+  ],
+  "hints": [
+    "Row i needs its own block of i + 1 ints: the rows have different lengths (a jagged array).",
+    "row[i][0] = row[i][i] = 1; row[i][j] = row[i-1][j-1] + row[i-1][j]."
+  ],
+  "constraints": ["1 <= numRows <= 30"],
+  "memory": "Same convention as *Transpose a Matrix*: return the row array, set `*returnSize`, and set `*returnColumnSizes` to a new array of row lengths. The caller frees everything."
+}
+@@ description
+Generate the first `numRows` rows of Pascal's triangle.
+
+```c
+int **generate(int numRows, int *returnSize, int **returnColumnSizes);
+```
+
+```
+        1
+       1 1
+      1 2 1
+     1 3 3 1
+```
+
+Each row is longer than the previous one, so this is a **jagged array**: a row array whose rows have different lengths. That is easy with an array of pointers, and impossible with a plain `int grid[R][C]`.
+@@ prelude
+int **generate(int numRows, int *returnSize, int **returnColumnSizes);
+@@ starter
+#include <stdlib.h>
+
+int **generate(int numRows, int *returnSize, int **returnColumnSizes) {
+    // TODO
+    *returnSize = 0;
+    *returnColumnSizes = NULL;
+    return NULL;
+}
+@@ solution
+#include <stdlib.h>
+
+int **generate(int numRows, int *returnSize, int **returnColumnSizes) {
+    int **rows = malloc(numRows * sizeof *rows);
+    int *sizes = malloc(numRows * sizeof *sizes);
+    for (int i = 0; i < numRows; i++) {
+        rows[i] = malloc((i + 1) * sizeof *rows[i]);
+        sizes[i] = i + 1;
+        rows[i][0] = rows[i][i] = 1;
+        for (int j = 1; j < i; j++)
+            rows[i][j] = rows[i - 1][j - 1] + rows[i - 1][j];
+    }
+    *returnSize = numRows;
+    *returnColumnSizes = sizes;
+    return rows;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int n = lc_read_int(), rs = -1, *rcs = NULL, r;
+        int **rows = generate(n, &rs, &rcs);
+        if (rs < 0 || (rs > 0 && (!rows || !rcs))) {
+            lc_fail("Set *returnSize and *returnColumnSizes, and return the rows.");
+            lc_out_null();
+        } else {
+            lc_out_begin();
+            for (r = 0; r < rs; r++) lc_out_int_array(rows[r], rcs[r]);
+            lc_out_end();
+            for (r = 0; r < rs; r++) LC_FREE_RESULT(rows[r], "a row returned by generate()");
+        }
+        if (rows) LC_FREE_RESULT(rows, "the row array returned by generate()");
+        if (rcs) LC_FREE_RESULT(rcs, "the *returnColumnSizes array");
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+2
+
+3
+
+10
+
+20
+
+30
+@@ editorial
+## Approach: build each row from the previous one
+
+```c
+int **generate(int numRows, int *returnSize, int **returnColumnSizes) {
+    int **rows = malloc(numRows * sizeof *rows);
+    int *sizes = malloc(numRows * sizeof *sizes);
+    for (int i = 0; i < numRows; i++) {
+        rows[i] = malloc((i + 1) * sizeof *rows[i]);    // row i has i + 1 entries
+        sizes[i] = i + 1;
+        rows[i][0] = rows[i][i] = 1;
+        for (int j = 1; j < i; j++)
+            rows[i][j] = rows[i - 1][j - 1] + rows[i - 1][j];
+    }
+    *returnSize = numRows;
+    *returnColumnSizes = sizes;
+    return rows;
+}
+```
+
+### Jagged arrays
+`rows[i]` points to a block of exactly `i + 1` ints. Reading `rows[i][i + 1]` is out of bounds even though a "rectangular" mental model suggests it exists. The guard pages around each row catch that immediately.
+
+### How much memory?
+`numRows` row pointers plus `1 + 2 + ... + numRows = numRows(numRows+1)/2` ints. A rectangular `numRows x numRows` array would waste almost half.
+
+**Complexity:** O(numRows²) time and memory.

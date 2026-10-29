@@ -1,0 +1,14 @@
+# dependencies
+node_modules/
+
+# generated: npm run vendor
+renderer/vendor/
+
+# generated: npm run package / tools/make-icon.ps1
+dist/
+build/icons/
+
+# screenshots from tools/shots.js
+shots/
+
+*.log
