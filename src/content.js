@@ -2,7 +2,8 @@
 // Loads the "Learn" lessons and the playground examples.
 //
 // lessons/*.md start with an HTML comment holding JSON metadata:
-//   <!-- {"title": "...", "summary": "...", "practice": ["problem-id"]} -->
+//   <!-- {"title": "...", "summary": "...", "practice": ["problem-id"], "part": "..."} -->
+// "part" starts a new group of lessons on the Learn page.
 // playground/examples.lc holds examples separated by
 //   @@@ example <id> <title>
 
@@ -22,6 +23,7 @@ function loadLessons(dir) {
       title: meta.title || f,
       summary: meta.summary || '',
       practice: meta.practice || [],
+      part: meta.part || null,
       minutes: Math.max(2, Math.round(body.split(/\s+/).length / 200)),
       body,
     });

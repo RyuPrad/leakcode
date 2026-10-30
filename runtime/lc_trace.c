@@ -31,7 +31,7 @@ enum { LC_TAG_DATA = 7, LC_TAG_UDT = 11, LC_TAG_ENUM = 12, LC_TAG_FUNCTION_TYPE 
 enum { LC_BT_VOID = 1, LC_BT_CHAR = 2, LC_BT_WCHAR = 3, LC_BT_INT = 6, LC_BT_UINT = 7, LC_BT_FLOAT = 8,
        LC_BT_BOOL = 10, LC_BT_LONG = 13, LC_BT_ULONG = 14 };
 
-typedef struct { uintptr_t addr; int line; unsigned char used, user, start; } LcCode;
+typedef struct { uintptr_t addr; int line; unsigned char used, user, start, entry; } LcCode;
 
 typedef struct { char name[48]; DWORD type; ULONG64 mod; ULONG flags, reg; LONG64 off; } LcVarDesc;
 typedef struct { uintptr_t pc; int nvars; LcVarDesc vars[LC_TRACE_MAX_VARS]; } LcScope;
@@ -63,6 +63,7 @@ typedef struct {
 static struct {
     int armed, on, steps;
     uintptr_t main_addr, bp_addr;
+    uintptr_t fresh_rsp;             /* stack pointer at the entry of a call not yet recorded */
     unsigned char main_byte, bp_byte;
     LcCode *code;                    /* direct-mapped cache, 1 << 16 slots */
     LcScope **scopes;                /* open addressing, never evicted */
@@ -86,8 +87,16 @@ static int trace_in_prologue(uintptr_t a)
     return a - (uintptr_t)(base + fe->BeginAddress) < ui[1];   /* UNWIND_INFO.SizeOfProlog */
 }
 
-/* Line information for a code address: is it in main.c, and is it the first
- * instruction of a source line (outside the function prologue)? */
+static int trace_is_entry(uintptr_t a)
+{
+    DWORD64 base = 0;
+    PRUNTIME_FUNCTION fe = RtlLookupFunctionEntry(a, &base, NULL);
+    return fe && (uintptr_t)(base + fe->BeginAddress) == a;
+}
+
+/* Line information for a code address: is it in main.c, is it the first
+ * instruction of a source line (outside the function prologue), and is it
+ * the first instruction of a function? */
 static LcCode trace_code(uintptr_t a)
 {
     LcCode *e = &T.code[(size_t)(((uint64_t)a * 0x9E3779B97F4A7C15ull) >> 48)];
@@ -104,6 +113,7 @@ static LcCode trace_code(uintptr_t a)
         e->user = 1;
         e->line = (int)ln.LineNumber;
         e->start = disp == 0 && !trace_in_prologue(a);
+        e->entry = (unsigned char)trace_is_entry(a);
     }
     return *e;
 }
@@ -581,6 +591,24 @@ static void trace_frames(LcSnap *s, const CONTEXT *c)
     }
 }
 
+/* MSVC fills a new stack frame with 0xCC (/RTCs) only when it holds arrays or
+ * variables whose address is taken; other calls start with whatever an
+ * earlier call left on the stack. Fill the locals of a call that has just
+ * started the same way, so a variable without a value always shows as one.
+ * Only the frame itself, between the stack pointer and the return address,
+ * is written. */
+static void trace_poison_locals(const LcFrameSnap *f, uintptr_t lo, uintptr_t hi)
+{
+    int i;
+    for (i = 0; i < f->nvars; i++) {
+        const LcVar *v = &f->vars[i];
+        if (v->d->flags & SYMFLAG_PARAMETER) continue;
+        if (!(v->d->flags & (SYMFLAG_REGREL | SYMFLAG_FRAMEREL))) continue;
+        if (v->size && v->addr >= lo && v->addr + v->size <= hi)
+            memset((void *)v->addr, 0xCC, (size_t)v->size);
+    }
+}
+
 static void trace_emit_frames(LcSnap *s, LcBuf *b)
 {
     int fi, vi;
@@ -703,6 +731,11 @@ static void trace_record(CONTEXT *c, int line, int final)
     s = (LcSnap *)HeapAlloc(G.meta, HEAP_ZERO_MEMORY, sizeof *s);
     if (!s) return;
     if (!final) trace_frames(s, c);
+    if (T.fresh_rsp) {          /* the first line of a new call: still inside it? */
+        if (!final && s->nframes && (uintptr_t)c->Rsp < T.fresh_rsp)
+            trace_poison_locals(&s->frames[s->nframes - 1], (uintptr_t)c->Rsp, T.fresh_rsp);
+        T.fresh_rsp = 0;
+    }
     for (x = G.live.next; x != &G.live; x = x->next)
         if (!x->harness) trace_snap_block(s, x);
     for (i = 0; i < T.nfreed; i++) trace_snap_block(s, T.freed[i]);   /* just freed: show them once */
@@ -765,6 +798,7 @@ static LONG CALLBACK trace_veh(EXCEPTION_POINTERS *ep)
             trace_patch(at, T.main_byte);
             T.armed = 0;
             T.on = 1;
+            T.fresh_rsp = (uintptr_t)c->Rsp;
             c->Rip = at;
             c->EFlags |= LC_TRAP_FLAG;
             return EXCEPTION_CONTINUE_EXECUTION;
@@ -789,6 +823,7 @@ static LONG CALLBACK trace_veh(EXCEPTION_POINTERS *ep)
         }
         ci = trace_code((uintptr_t)c->Rip);
         if (ci.user) {
+            if (ci.entry) T.fresh_rsp = (uintptr_t)c->Rsp;    /* a call into main.c */
             if (ci.start) trace_record(c, ci.line, 0);
             if (T.on) c->EFlags |= LC_TRAP_FLAG;
             return EXCEPTION_CONTINUE_EXECUTION;

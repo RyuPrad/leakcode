@@ -67,6 +67,7 @@ html, body {
   font: 14px/1.5 var(--font);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
+  font-variant-ligatures: none;    /* Cascadia Code would draw != as ≠, which nobody can type */
 }
 
 a { color: var(--accent); text-decoration: none; }
@@ -840,6 +841,8 @@ details.prelude pre { margin-top: 8px; }
 
 /* ------------------------------------------------------------ learn path */
 
+.learn-resume { margin-top: 18px; }
+.learn-resume:empty { display: none; }
 .learn-path { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 22px 0 6px; }
 .path-step { display: flex; gap: 14px; padding: 16px 18px; color: var(--text); transition: border-color 0.15s, transform 0.15s; }
 .path-step:hover { text-decoration: none; border-color: var(--accent); transform: translateY(-1px); }

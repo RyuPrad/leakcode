@@ -1,6 +1,6 @@
 # LeakCode
 
-A Windows desktop app for learning C and memory management: 8 lessons, a **memory visualizer** that runs your program line by line and draws its stack, heap and pointers, 45 hands-on exercises in 9 chapters, and a playground. Every program you run is checked for leaks, buffer overflows, use-after-free, double frees and other memory bugs, and each report points to the exact line.
+A Windows desktop app for learning C and memory management, starting from zero: 14 lessons (six on C basics for complete beginners, then pointers and memory), a **memory visualizer** that runs your program line by line and draws its stack, heap and pointers, 58 hands-on exercises in 10 chapters, and a playground. Every program you run is checked for leaks, buffer overflows, use-after-free, double frees and other memory bugs, and each report points to the exact line.
 
 ## Requirements
 

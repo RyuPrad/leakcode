@@ -17,20 +17,31 @@ export function renderLearn(root) {
   const step = (n, ic, title, text, href) => h('a', { class: 'card path-step', href },
     h('div', { class: 'path-num' }, icon(ic)),
     h('div', null, h('h3', null, `${n}. ${title}`), h('p', null, text)));
+  const resume = h('div', { class: 'learn-resume' });
   const inner = h('div', { class: 'page-inner' },
     h('h1', { class: 'page-title' }, 'Learn C & memory management'),
-    h('p', { class: 'page-sub' }, 'Short lessons on how C really works with memory. Read one, watch its examples run in the visualizer, then practise.'),
+    h('p', { class: 'page-sub' }, 'No C experience needed: the first lessons start from zero. Each lesson is short. Read it, watch its examples run in the visualizer, then practise.'),
+    resume,
     h('div', { class: 'learn-path' },
-      step(1, 'book', 'Read', 'Each lesson explains one idea: the stack and the heap, pointers, strings, malloc and free, memory bugs.', '#/learn/memory-model'),
+      step(1, 'book', 'Read', 'Start with Your First C Program. Each lesson explains one idea with programs you can run from the page.', '#/learn/first-program'),
       step(2, 'eye', 'Watch', 'The visualizer runs code one line at a time and draws every variable, heap block and pointer.', '#/visualize'),
-      step(3, 'list', 'Practise', 'Exercises with a memory check on every run: leaks and invalid accesses are pointed out line by line.', '#/practice')),
-    h('h2', { class: 'section-title' }, 'Lessons'));
+      step(3, 'list', 'Practise', 'Start with the C Basics exercises. Every run is checked, and mistakes are pointed out line by line.', '#/practice')));
   page.append(inner);
   root.append(page);
   lessonList().then((lessons) => {
-    inner.append(h('div', { class: 'lesson-grid' }, lessons.map((l) => {
+    const next = lessons.find((l) => !state.lessonsRead[l.id]);
+    if (next) {
+      resume.append(h('a', { class: 'btn primary', href: `#/learn/${next.id}` },
+        icon('book'), next.number === 1 ? `Start with lesson 1: ${next.title}` : `Continue with lesson ${next.number}: ${next.title}`));
+    }
+    let grid = null;
+    for (const l of lessons) {
+      if (l.part || !grid) {
+        grid = h('div', { class: 'lesson-grid' });
+        inner.append(h('h2', { class: 'section-title' }, l.part || 'Lessons'), grid);
+      }
       const solved = l.practice.filter((id) => problemStatus(id) === 'solved').length;
-      return h('div', { class: 'card lesson-card', onclick: () => { location.hash = `#/learn/${l.id}`; } },
+      grid.append(h('div', { class: 'card lesson-card', onclick: () => { location.hash = `#/learn/${l.id}`; } },
         h('div', { class: 'l-top' },
           h('span', { class: 'l-num' }, `Lesson ${l.number}`),
           state.lessonsRead[l.id] ? h('span', { class: 'l-read' }, icon('check'), 'Read') : null),
@@ -38,8 +49,8 @@ export function renderLearn(root) {
         h('p', null, l.summary),
         h('div', { class: 'l-foot' },
           h('span', null, `${l.minutes} min read`),
-          l.practice.length ? h('span', null, `${solved}/${l.practice.length} practice problems solved`) : null));
-    })));
+          l.practice.length ? h('span', null, `${solved}/${l.practice.length} exercises solved`) : null)));
+    }
   });
   return {};
 }

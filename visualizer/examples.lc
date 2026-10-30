@@ -1,3 +1,86 @@
+@@@ example variables Variables and arithmetic
+#include <stdio.h>
+
+int main(void) {
+    int apples = 7;                   // a whole number
+    int friends = 2;
+    int each = apples / friends;      // int / int drops the fraction: 3
+    int left = apples % friends;      // the remainder: 1
+    double exact = (double)apples / friends;   // 3.5
+    char grade = 'A';
+    grade = grade + 1;                // a char is a small number: now 'B'
+    printf("%d each, %d left, exactly %.1f, grade %c\n", each, left, exact, grade);
+    return 0;
+}
+
+@@@ example if-else Choosing with if and else
+#include <stdio.h>
+
+int main(void) {
+    int temperature = 22;
+    if (temperature > 30) {
+        printf("hot\n");
+    } else if (temperature > 15) {
+        printf("warm\n");             // only this branch runs
+    } else {
+        printf("cold\n");
+    }
+    return 0;
+}
+
+@@@ example loops Loops: for and while
+#include <stdio.h>
+
+int main(void) {
+    int sum = 0;
+    for (int i = 1; i <= 4; i++) {    // i takes the values 1, 2, 3, 4
+        sum += i;
+    }
+    int n = 2026;
+    int digits = 0;
+    while (n > 0) {                   // repeat until no digits are left
+        n = n / 10;
+        digits++;
+    }
+    printf("sum = %d, digits = %d\n", sum, digits);
+    return 0;
+}
+
+@@@ example functions Functions and stack frames
+#include <stdio.h>
+
+int square(int x) {
+    int result = x * x;               // result lives in this call's own frame
+    return result;
+}
+
+int sumOfSquares(int a, int b) {
+    return square(a) + square(b);     // two calls, one after the other
+}
+
+int main(void) {
+    int total = sumOfSquares(3, 4);
+    printf("%d\n", total);            // 25
+    return 0;
+}
+
+@@@ example array-sum Arrays: a row of values
+#include <stdio.h>
+
+int main(void) {
+    int scores[5] = { 90, 72, 85, 64, 100 };
+    int best = scores[0];
+    int total = 0;
+    for (int i = 0; i < 5; i++) {     // i visits every index: 0 to 4
+        total += scores[i];
+        if (scores[i] > best) {
+            best = scores[i];
+        }
+    }
+    printf("total %d, best %d\n", total, best);
+    return 0;
+}
+
 @@@ example pointers Variables and pointers
 #include <stdio.h>
 

@@ -1,7 +1,7 @@
 'use strict';
 // Loads the problem set.
 //
-// Each file in problems/ holds one study-plan section and its problems:
+// Each file in problems/ holds one chapter (a section) and its problems:
 //
 //   @@@ section
 //   {"id": "...", "title": "...", "summary": "..."}

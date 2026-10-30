@@ -1,7 +1,7 @@
-<!-- {"title": "Structs, Alignment and Opaque Types", "summary": "How structs are laid out in memory, why sizeof is often larger than you expect, and how C libraries hide their internals behind pointers.", "practice": ["bytes-of-an-integer", "ring-buffer", "reference-counted-strings", "bump-allocator"]} -->
-# Structs, alignment and opaque types
+<!-- {"title": "Structs in Memory: Alignment and Opaque Types", "summary": "How structs are laid out in memory, why sizeof is often larger than you expect, and how C libraries hide their internals behind pointers.", "practice": ["bytes-of-an-integer", "ring-buffer", "reference-counted-strings", "bump-allocator"]} -->
+# Structs in memory: alignment and opaque types
 
-A `struct` groups fields into one object. Its fields are stored **in declaration order**, but not necessarily back to back.
+The Structs lesson showed how to define and use a `struct`. This one looks underneath: how its bytes are arranged, and how C libraries use structs to hide their internals. A struct's fields are stored **in declaration order**, but not necessarily back to back.
 
 ## Alignment and padding
 

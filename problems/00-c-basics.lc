@@ -1,0 +1,1248 @@
+@@@ section
+{"id": "basics", "title": "C Basics", "summary": "Start here if you are new to C: your first functions, with arithmetic, if and else, loops, arrays and structs. No pointers yet."}
+
+@@@ problem add-two-numbers
+@@ meta
+{
+  "title": "Add Two Numbers",
+  "difficulty": "Easy",
+  "topics": ["Variables", "Functions"],
+  "params": [{"name": "a", "type": "int"}, {"name": "b", "type": "int"}],
+  "examples": [
+    {"input": ["2", "3"], "output": "5"},
+    {"input": ["-7", "10"], "output": "3", "explanation": "Negative numbers work the same way: -7 + 10 = 3."}
+  ],
+  "hints": [
+    "The function already receives the two numbers, in the parameters a and b. All you need to do is give back their sum.",
+    "`return a + b;` computes the sum and hands it back to whoever called `add`."
+  ],
+  "constraints": ["-10^6 <= a, b <= 10^6"]
+}
+@@ description
+Your very first exercise: complete the function `add` so that it gives back the sum of its two inputs.
+
+```c
+int add(int a, int b);
+```
+
+You don't write `main` here. LeakCode's test harness calls `add` with different pairs of numbers and checks what it returns each time. Press **Run** to try your code on the examples below, then **Submit** to run every test.
+
+New to C? Read the lessons *Your First C Program* and *Variables, Types and Arithmetic* first.
+@@ prelude
+int add(int a, int b);
+@@ starter
+int add(int a, int b) {
+    // TODO: give back the sum of a and b.
+    return 0;
+}
+@@ solution
+int add(int a, int b) {
+    return a + b;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int a = lc_read_int();
+        int b = lc_read_int();
+        lc_out_int(add(a, b));
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+0
+0
+
+1000000
+1000000
+
+-1000000
+-1
+
+123
+-123
+
+42
+58
+@@ editorial
+## Approach
+
+The parameters `a` and `b` already hold the two numbers, and `return` gives a value back to the caller, so the whole function is one line:
+
+```c
+int add(int a, int b) {
+    return a + b;
+}
+```
+
+### What happens during a test
+For the first example, the harness runs `add(2, 3)`. Inside the function, `a` is 2 and `b` is 3. `a + b` evaluates to 5, and `return` hands 5 back to the harness, which compares it with the expected answer.
+
+### Common mistakes
+- **Printing instead of returning.** `printf("%d", a + b);` shows the number on the screen, but the harness checks the value the function *returns*.
+- **Leaving `return 0;` in place.** Replace it: a function stops at the first `return` it reaches.
+
+@@@ problem celsius-to-fahrenheit
+@@ meta
+{
+  "title": "Celsius to Fahrenheit",
+  "difficulty": "Easy",
+  "topics": ["double", "Arithmetic"],
+  "params": [{"name": "celsius", "type": "double"}],
+  "examples": [
+    {"input": ["100"], "output": "212.00", "explanation": "100 × 9 / 5 + 32 = 212: water boils at 100 °C, which is 212 °F."},
+    {"input": ["37"], "output": "98.60", "explanation": "Body temperature: 37 × 9 / 5 + 32 = 98.6."}
+  ],
+  "hints": [
+    "The formula is F = C × 9 / 5 + 32. In C, multiplication is written `*`.",
+    "Careful with `9 / 5`: both are whole numbers, so C computes 1, not 1.8! Write `9.0 / 5`, or multiply first (`celsius * 9 / 5`), so the division happens with fractions."
+  ],
+  "constraints": ["-273.15 <= celsius <= 10^4", "The result is compared after rounding to 2 decimals."]
+}
+@@ description
+Convert a temperature from degrees Celsius to degrees Fahrenheit, using the formula
+
+**F = C × 9 / 5 + 32**
+
+```c
+double toFahrenheit(double celsius);
+```
+
+Both the input and the result are `double`s: numbers that can have a fractional part, such as `36.6`. The tests show your result rounded to 2 decimals.
+@@ prelude
+double toFahrenheit(double celsius);
+@@ starter
+double toFahrenheit(double celsius) {
+    // TODO: apply F = C * 9 / 5 + 32.
+    return 0.0;
+}
+@@ solution
+double toFahrenheit(double celsius) {
+    return celsius * 9.0 / 5.0 + 32.0;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        double c = lc_read_double();
+        lc_out_double(toFahrenheit(c), 2);
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+0
+
+-40
+
+36.6
+
+-17.5
+
+21.3
+
+1000
+
+-273.15
+
+25.25
+@@ editorial
+## Approach
+
+Translate the formula directly, making sure the division is done with fractions:
+
+```c
+double toFahrenheit(double celsius) {
+    return celsius * 9.0 / 5.0 + 32.0;
+}
+```
+
+`celsius` is a `double`, so `celsius * 9.0` is a `double`, and dividing it by `5.0` keeps the fraction.
+
+### The integer-division trap
+`celsius * (9 / 5) + 32` looks the same, but `9 / 5` divides two whole numbers, which gives `1` in C. The function would then compute `celsius + 32`: 132 instead of 212 for boiling water. The order matters too: in `9 / 5 * celsius`, C still computes `9 / 5` first, because it evaluates `*` and `/` from left to right. Writing at least one side as a `double` (`9.0`) avoids the problem everywhere.
+
+@@@ problem is-even
+@@ meta
+{
+  "title": "Even or Odd",
+  "difficulty": "Easy",
+  "topics": ["Remainder", "bool"],
+  "params": [{"name": "n", "type": "int"}],
+  "examples": [
+    {"input": ["4"], "output": "true"},
+    {"input": ["7"], "output": "false", "explanation": "7 % 2 is 1: dividing 7 by 2 leaves a remainder, so 7 is odd."},
+    {"input": ["-3"], "output": "false"}
+  ],
+  "hints": [
+    "A number is even when dividing it by 2 leaves no remainder, and `%` gives the remainder.",
+    "In C, `-3 % 2` is -1, not 1. So test `n % 2 == 0`, which works for negative numbers too."
+  ],
+  "constraints": ["-10^9 <= n <= 10^9"]
+}
+@@ description
+Return `true` if `n` is even and `false` if it is odd.
+
+```c
+bool isEven(int n);
+```
+
+`bool` is the type for yes/no answers. Its values are `true` and `false`, and it comes from `#include <stdbool.h>`.
+@@ prelude
+#include <stdbool.h>
+
+bool isEven(int n);
+@@ starter
+#include <stdbool.h>
+
+bool isEven(int n) {
+    // TODO: return true when n is even, false when it is odd.
+    return false;
+}
+@@ solution
+#include <stdbool.h>
+
+bool isEven(int n) {
+    return n % 2 == 0;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int n = lc_read_int();
+        lc_out_bool(isEven(n));
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+0
+
+1
+
+-1
+
+-2
+
+2
+
+13
+
+1000000000
+
+-999999999
+@@ editorial
+## Approach
+
+`n % 2` is the remainder of dividing `n` by 2. It is 0 exactly when `n` is even, and a comparison already produces true or false, so you can return it directly:
+
+```c
+bool isEven(int n) {
+    return n % 2 == 0;
+}
+```
+
+This is the same as the longer version below, which is also correct:
+
+```c
+if (n % 2 == 0) {
+    return true;
+} else {
+    return false;
+}
+```
+
+### Common mistake: testing for 1
+`return n % 2 == 1;` (for "is odd") fails for negative numbers: in C, the remainder takes the sign of the number being divided, so `-3 % 2` is `-1`. Comparing with 0 avoids the problem.
+
+@@@ problem largest-of-three
+@@ meta
+{
+  "title": "Largest of Three",
+  "difficulty": "Easy",
+  "topics": ["if / else", "Comparisons"],
+  "params": [{"name": "a", "type": "int"}, {"name": "b", "type": "int"}, {"name": "c", "type": "int"}],
+  "examples": [
+    {"input": ["3", "9", "4"], "output": "9"},
+    {"input": ["-5", "-2", "-8"], "output": "-2", "explanation": "Among negative numbers, the largest is the one closest to zero."},
+    {"input": ["6", "6", "1"], "output": "6", "explanation": "When two numbers are equal and largest, return that value."}
+  ],
+  "hints": [
+    "Keep the largest value seen so far in a variable: start with `a`, then compare it with `b`, then with `c`.",
+    "`if (b > largest) { largest = b; }` replaces the current best only when `b` beats it."
+  ],
+  "constraints": ["-10^9 <= a, b, c <= 10^9"]
+}
+@@ description
+Return the largest of the three numbers `a`, `b` and `c`.
+
+```c
+int largestOfThree(int a, int b, int c);
+```
+@@ prelude
+int largestOfThree(int a, int b, int c);
+@@ starter
+int largestOfThree(int a, int b, int c) {
+    // TODO: compare the numbers and return the largest.
+    return 0;
+}
+@@ solution
+int largestOfThree(int a, int b, int c) {
+    int largest = a;
+    if (b > largest) {
+        largest = b;
+    }
+    if (c > largest) {
+        largest = c;
+    }
+    return largest;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int a = lc_read_int();
+        int b = lc_read_int();
+        int c = lc_read_int();
+        lc_out_int(largestOfThree(a, b, c));
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+1
+2
+3
+
+3
+2
+1
+
+2
+3
+1
+
+0
+0
+0
+
+-1000000000
+1000000000
+0
+
+-7
+-7
+-9
+
+100
+-100
+99
+@@ editorial
+## Approach: keep the best so far
+
+Start by assuming `a` is the largest, then let `b` and `c` challenge it:
+
+```c
+int largestOfThree(int a, int b, int c) {
+    int largest = a;
+    if (b > largest) {
+        largest = b;
+    }
+    if (c > largest) {
+        largest = c;
+    }
+    return largest;
+}
+```
+
+This "best so far" pattern is worth remembering: with a loop instead of separate `if`s, it finds the largest element of a whole array.
+
+### Another way
+You can also compare everything directly:
+
+```c
+if (a >= b && a >= c) return a;
+if (b >= a && b >= c) return b;
+return c;
+```
+
+It works, but it's easy to get a condition wrong (`>` instead of `>=` breaks ties), and it doesn't grow well to more numbers.
+
+@@@ problem letter-grade
+@@ meta
+{
+  "title": "Letter Grade",
+  "difficulty": "Easy",
+  "topics": ["if / else", "char"],
+  "params": [{"name": "score", "type": "int"}],
+  "examples": [
+    {"input": ["95"], "output": "\"A\""},
+    {"input": ["80"], "output": "\"B\"", "explanation": "80 is the lowest score that still earns a B."},
+    {"input": ["42"], "output": "\"F\""}
+  ],
+  "hints": [
+    "Use an `if` / `else if` chain that starts from the best grade: `if (score >= 90) return 'A';`. Once a condition is true, the rest is skipped.",
+    "A single character is written in single quotes: `'A'`. Double quotes (`\"A\"`) make a string, which is a different type."
+  ],
+  "constraints": ["0 <= score <= 100"]
+}
+@@ description
+Turn a test score from 0 to 100 into a letter grade:
+
+| Score | Grade |
+|---|---|
+| 90 to 100 | `'A'` |
+| 80 to 89 | `'B'` |
+| 70 to 79 | `'C'` |
+| 60 to 69 | `'D'` |
+| below 60 | `'F'` |
+
+```c
+char letterGrade(int score);
+```
+
+The function returns a `char`, a single character such as `'A'`.
+@@ prelude
+char letterGrade(int score);
+@@ starter
+char letterGrade(int score) {
+    // TODO: return 'A', 'B', 'C', 'D' or 'F'.
+    return '?';
+}
+@@ solution
+char letterGrade(int score) {
+    if (score >= 90) {
+        return 'A';
+    } else if (score >= 80) {
+        return 'B';
+    } else if (score >= 70) {
+        return 'C';
+    } else if (score >= 60) {
+        return 'D';
+    } else {
+        return 'F';
+    }
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int score = lc_read_int();
+        char grade[2] = { letterGrade(score), '\0' };
+        lc_out_str(grade);
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+100
+
+90
+
+89
+
+79
+
+70
+
+69
+
+60
+
+59
+
+0
+
+85
+
+73
+@@ editorial
+## Approach: check from the top down
+
+```c
+char letterGrade(int score) {
+    if (score >= 90) {
+        return 'A';
+    } else if (score >= 80) {
+        return 'B';
+    } else if (score >= 70) {
+        return 'C';
+    } else if (score >= 60) {
+        return 'D';
+    } else {
+        return 'F';
+    }
+}
+```
+
+The order of the checks does the work. When `score >= 80` is tested, we already know the score is below 90, otherwise the first branch would have returned. So there is no need to write `score >= 80 && score <= 89`.
+
+### Common mistakes
+- **Checking in the wrong order.** If `score >= 60` came first, every passing score would get a `'D'`.
+- **Boundaries.** 90 is an A and 89 is a B: `score > 90` would give 90 a B.
+
+@@@ problem sum-one-to-n
+@@ meta
+{
+  "title": "Sum from 1 to N",
+  "difficulty": "Easy",
+  "topics": ["Loops", "long long"],
+  "params": [{"name": "n", "type": "int"}],
+  "examples": [
+    {"input": ["5"], "output": "15", "explanation": "1 + 2 + 3 + 4 + 5 = 15."},
+    {"input": ["1"], "output": "1"},
+    {"input": ["0"], "output": "0", "explanation": "There is nothing to add, so the sum is 0."}
+  ],
+  "hints": [
+    "Start a total at 0, then use a `for` loop that counts from 1 up to and including `n`, adding each number to the total.",
+    "For n = 100000 the sum is 5000050000, too big for an `int`. Keep the total in a `long long`."
+  ],
+  "constraints": ["0 <= n <= 10^5"]
+}
+@@ description
+Return the sum of all whole numbers from 1 to `n`: 1 + 2 + 3 + ... + n.
+
+```c
+long long sumTo(int n);
+```
+
+The result is a `long long`: a whole number type that can hold much larger values than `int`.
+@@ prelude
+long long sumTo(int n);
+@@ starter
+long long sumTo(int n) {
+    // TODO: add up 1 + 2 + ... + n.
+    return 0;
+}
+@@ solution
+long long sumTo(int n) {
+    long long total = 0;
+    for (int i = 1; i <= n; i++) {
+        total += i;
+    }
+    return total;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int n = lc_read_int();
+        lc_out_int(sumTo(n));
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+2
+
+3
+
+10
+
+100
+
+1000
+
+99999
+
+100000
+@@ editorial
+## Approach: a counting loop
+
+```c
+long long sumTo(int n) {
+    long long total = 0;
+    for (int i = 1; i <= n; i++) {
+        total += i;
+    }
+    return total;
+}
+```
+
+The loop runs with `i` = 1, 2, ..., n. Here the condition is `i <= n`, because `n` itself must be included. For `n = 0` the loop doesn't run at all, and the function correctly returns 0.
+
+### Why long long?
+The sum grows fast: for n = 100 000 it is 5 000 050 000, more than the largest `int` (2 147 483 647). With `int total`, the addition would overflow and give a wrong, probably negative, result.
+
+### A shortcut
+A famous formula gives the answer without a loop: 1 + 2 + ... + n = n × (n + 1) / 2. In C, convert to `long long` before multiplying, so the multiplication itself doesn't overflow:
+
+```c
+return (long long)n * (n + 1) / 2;
+```
+
+@@@ problem count-digits
+@@ meta
+{
+  "title": "Count the Digits",
+  "difficulty": "Easy",
+  "topics": ["Loops", "Integer division"],
+  "params": [{"name": "n", "type": "int"}],
+  "examples": [
+    {"input": ["2026"], "output": "4"},
+    {"input": ["7"], "output": "1"},
+    {"input": ["0"], "output": "1", "explanation": "0 is written with one digit."}
+  ],
+  "hints": [
+    "`n / 10` removes the last digit: 2026 / 10 is 202. Count how many times you can do that before `n` reaches 0.",
+    "Watch out for n = 0: a `while (n > 0)` loop doesn't run at all, but the answer is 1. Handle 0 separately, or use a `do { ... } while (n > 0);` loop, which always runs at least once."
+  ],
+  "constraints": ["0 <= n <= 2^31 - 1"]
+}
+@@ description
+Return how many digits the number `n` has when written in decimal.
+
+```c
+int countDigits(int n);
+```
+@@ prelude
+int countDigits(int n);
+@@ starter
+int countDigits(int n) {
+    // TODO: count the digits of n.
+    return 0;
+}
+@@ solution
+int countDigits(int n) {
+    int digits = 0;
+    do {
+        n = n / 10;
+        digits++;
+    } while (n > 0);
+    return digits;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int n = lc_read_int();
+        lc_out_int(countDigits(n));
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+9
+
+10
+
+99
+
+100
+
+5
+
+123456789
+
+1000000000
+
+2147483647
+@@ editorial
+## Approach: remove digits until none are left
+
+Dividing by 10 drops the last digit (`2026 / 10` is `202`, since integer division throws away the fraction). Count how many divisions it takes to reach 0:
+
+```c
+int countDigits(int n) {
+    int digits = 0;
+    do {
+        n = n / 10;
+        digits++;
+    } while (n > 0);
+    return digits;
+}
+```
+
+For 2026: 2026 → 202 → 20 → 2 → 0, four steps, four digits.
+
+### Why do ... while?
+A `do { ... } while (condition);` loop checks its condition **after** each round, so its body always runs at least once. That handles `n = 0` correctly: one round, one digit. With a plain `while (n > 0)` loop, the body never runs for 0 and you would return 0, so you'd need an extra `if (n == 0) return 1;` first.
+
+Changing `n` inside the function is fine: it is the function's own copy of the caller's number.
+
+@@@ problem is-prime
+@@ meta
+{
+  "title": "Prime Check",
+  "difficulty": "Easy",
+  "topics": ["Loops", "Remainder", "bool"],
+  "params": [{"name": "n", "type": "int"}],
+  "examples": [
+    {"input": ["7"], "output": "true", "explanation": "7 can only be divided evenly by 1 and by 7."},
+    {"input": ["12"], "output": "false", "explanation": "12 = 2 × 6, so it has divisors other than 1 and itself."},
+    {"input": ["1"], "output": "false", "explanation": "By definition, a prime is at least 2."}
+  ],
+  "hints": [
+    "A number n of at least 2 is prime when no number d between 2 and n - 1 divides it evenly. `n % d == 0` means d divides n.",
+    "As soon as you find a divisor, you know the answer: `return false;` right there. If the loop ends without finding one, return true.",
+    "You only need to try divisors while `d * d <= n`: if n had a divisor bigger than its square root, it would also have one smaller than it."
+  ],
+  "constraints": ["0 <= n <= 10^6"]
+}
+@@ description
+A **prime** number is a whole number of at least 2 that can be divided evenly only by 1 and by itself: 2, 3, 5, 7, 11, 13, ...
+
+Return `true` if `n` is prime and `false` otherwise.
+
+```c
+bool isPrime(int n);
+```
+@@ prelude
+#include <stdbool.h>
+
+bool isPrime(int n);
+@@ starter
+#include <stdbool.h>
+
+bool isPrime(int n) {
+    // TODO: return true when n is prime.
+    return false;
+}
+@@ solution
+#include <stdbool.h>
+
+bool isPrime(int n) {
+    if (n < 2) {
+        return false;
+    }
+    for (int d = 2; d * d <= n; d++) {
+        if (n % d == 0) {
+            return false;
+        }
+    }
+    return true;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int n = lc_read_int();
+        lc_out_bool(isPrime(n));
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+0
+
+2
+
+3
+
+4
+
+9
+
+25
+
+49
+
+97
+
+121
+
+7919
+
+999983
+
+1000000
+@@ editorial
+## Approach: look for a divisor
+
+```c
+bool isPrime(int n) {
+    if (n < 2) {
+        return false;
+    }
+    for (int d = 2; d * d <= n; d++) {
+        if (n % d == 0) {
+            return false;      // found a divisor: not prime
+        }
+    }
+    return true;               // no divisor found
+}
+```
+
+Two `return`s do the work. The one inside the loop ends the function as soon as a divisor is found; reaching the end of the loop means none exists.
+
+### Why stop at d * d <= n?
+If `n = a × b`, the two factors can't both be larger than the square root of `n`, because their product would then be too big. So if `n` has any divisor, it has one with `d * d <= n`. For n = 999 983, this tries about 1 000 divisors instead of a million. Trying every `d < n` is also correct, just slower.
+
+### Common mistakes
+- **Returning true too early.** `else return true;` inside the loop decides after testing only `d = 2`: 9 would count as prime.
+- **Forgetting 0 and 1.** Neither is prime, but the loop never runs for them, so they need the first check.
+
+@@@ problem power
+@@ meta
+{
+  "title": "Integer Power",
+  "difficulty": "Easy",
+  "topics": ["Loops", "Functions", "long long"],
+  "params": [{"name": "base", "type": "int"}, {"name": "exponent", "type": "int"}],
+  "examples": [
+    {"input": ["2", "10"], "output": "1024", "explanation": "2 multiplied by itself 10 times."},
+    {"input": ["5", "0"], "output": "1", "explanation": "Any number to the power 0 is 1."},
+    {"input": ["-3", "3"], "output": "-27"}
+  ],
+  "hints": [
+    "Start a result at 1, then multiply it by `base`, `exponent` times, with a `for` loop.",
+    "The answer can reach 10^18, far more than an `int` can hold: keep the result in a `long long`."
+  ],
+  "constraints": ["-10 <= base <= 10", "0 <= exponent <= 18", "the answer fits in a long long"]
+}
+@@ description
+Return `base` raised to the power `exponent`: `base` multiplied by itself `exponent` times.
+
+```c
+long long power(int base, int exponent);
+```
+
+For example, `power(2, 3)` is 2 × 2 × 2 = 8.
+@@ prelude
+long long power(int base, int exponent);
+@@ starter
+long long power(int base, int exponent) {
+    // TODO: multiply base by itself exponent times.
+    return 0;
+}
+@@ solution
+long long power(int base, int exponent) {
+    long long result = 1;
+    for (int i = 0; i < exponent; i++) {
+        result *= base;
+    }
+    return result;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int base = lc_read_int();
+        int exponent = lc_read_int();
+        lc_out_int(power(base, exponent));
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+0
+5
+
+0
+0
+
+1
+18
+
+10
+18
+
+-10
+17
+
+9
+18
+
+7
+1
+
+-1
+7
+@@ editorial
+## Approach: repeated multiplication
+
+```c
+long long power(int base, int exponent) {
+    long long result = 1;
+    for (int i = 0; i < exponent; i++) {
+        result *= base;
+    }
+    return result;
+}
+```
+
+`result` starts at 1, the value of any number to the power 0, and is multiplied by `base` once per round. `for (int i = 0; i < exponent; i++)` runs exactly `exponent` times.
+
+### Why not pow()?
+C's `pow` from `<math.h>` works with `double`s. A `double` holds about 16 significant digits, so a big result such as 9¹⁸ = 150 094 635 296 999 121 can't be stored exactly, and the answer comes back slightly wrong. Whole-number arithmetic with `long long` is exact.
+
+@@@ problem sum-of-an-array
+@@ meta
+{
+  "title": "Sum of an Array",
+  "difficulty": "Easy",
+  "topics": ["Arrays", "Loops"],
+  "params": [{"name": "nums", "type": "int[]"}],
+  "examples": [
+    {"input": ["[3,1,4,1,5]"], "output": "14"},
+    {"input": ["[-2,2]"], "output": "0"},
+    {"input": ["[]"], "output": "0", "explanation": "An empty array (numsSize is 0) adds up to 0."}
+  ],
+  "hints": [
+    "Visit every index from 0 to numsSize - 1 with a `for` loop and add `nums[i]` to a running total.",
+    "Start the total at 0, and use `i < numsSize` as the loop condition, not `i <= numsSize`."
+  ],
+  "constraints": ["0 <= numsSize <= 1000", "-10^6 <= nums[i] <= 10^6"]
+}
+@@ description
+Return the sum of all the elements of the array `nums`, which has `numsSize` elements.
+
+```c
+int sumArray(int nums[], int numsSize);
+```
+
+In C a function can't find out how long an array is, so the length always comes as a separate parameter.
+@@ prelude
+int sumArray(int nums[], int numsSize);
+@@ starter
+int sumArray(int nums[], int numsSize) {
+    // TODO: add up nums[0], nums[1], ..., nums[numsSize - 1].
+    return 0;
+}
+@@ solution
+int sumArray(int nums[], int numsSize) {
+    int total = 0;
+    for (int i = 0; i < numsSize; i++) {
+        total += nums[i];
+    }
+    return total;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int n;
+        int *nums = lc_read_int_array(&n);
+        lc_out_int(sumArray(nums, n));
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[0]
+
+[5]
+
+[1,2,3,4,5,6,7,8,9,10]
+
+[-1,-2,-3]
+
+[1000000,-1000000,7]
+
+[100,200,300,400]
+@@ editorial
+## Approach
+
+```c
+int sumArray(int nums[], int numsSize) {
+    int total = 0;
+    for (int i = 0; i < numsSize; i++) {
+        total += nums[i];
+    }
+    return total;
+}
+```
+
+The loop visits the indexes 0, 1, ..., numsSize - 1, exactly the valid ones. For an empty array, `numsSize` is 0, the loop doesn't run, and the result is 0.
+
+### Common mistake: one step too far
+With `i <= numsSize`, the last round reads `nums[numsSize]`, which is past the end of the array. C won't stop you, but LeakCode will: the test fails with a report that points at the line and says how far past the end the read was.
+
+@@@ problem average-of-an-array
+@@ meta
+{
+  "title": "Average of an Array",
+  "difficulty": "Easy",
+  "topics": ["Arrays", "double", "Integer division"],
+  "params": [{"name": "nums", "type": "int[]"}],
+  "examples": [
+    {"input": ["[1,2,3,4]"], "output": "2.50", "explanation": "(1 + 2 + 3 + 4) / 4 = 10 / 4 = 2.5. Dividing two ints would give 2."},
+    {"input": ["[7]"], "output": "7.00"}
+  ],
+  "hints": [
+    "First add up the elements, as in Sum of an Array, then divide by `numsSize`.",
+    "The sum and `numsSize` are both `int`s, so `sum / numsSize` throws away the fraction. Convert first: `(double)sum / numsSize`."
+  ],
+  "constraints": ["1 <= numsSize <= 1000", "-10^6 <= nums[i] <= 10^6", "The result is compared after rounding to 2 decimals."]
+}
+@@ description
+Return the average (the mean) of the `numsSize` elements of `nums`: their sum divided by how many there are.
+
+```c
+double average(int nums[], int numsSize);
+```
+
+The array always has at least one element. The tests show your result rounded to 2 decimals.
+@@ prelude
+double average(int nums[], int numsSize);
+@@ starter
+double average(int nums[], int numsSize) {
+    // TODO: add up the elements, then divide by numsSize.
+    return 0.0;
+}
+@@ solution
+double average(int nums[], int numsSize) {
+    int sum = 0;
+    for (int i = 0; i < numsSize; i++) {
+        sum += nums[i];
+    }
+    return (double)sum / numsSize;
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int n;
+        int *nums = lc_read_int_array(&n);
+        lc_out_double(average(nums, n), 2);
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[1,2]
+
+[-1,-2]
+
+[5,5,5]
+
+[0,0,1]
+
+[10,20,25]
+
+[-3,4]
+
+[1000000,999999]
+@@ editorial
+## Approach
+
+```c
+double average(int nums[], int numsSize) {
+    int sum = 0;
+    for (int i = 0; i < numsSize; i++) {
+        sum += nums[i];
+    }
+    return (double)sum / numsSize;
+}
+```
+
+The interesting part is the last line. `(double)sum` converts the sum to a `double` **before** dividing, so the division keeps the fraction.
+
+### The integer-division trap, again
+- `sum / numsSize` divides two ints: for [1,2,3,4] it gives 2, and returning it as a `double` makes it 2.00, not 2.50.
+- `(double)(sum / numsSize)` converts too late: the fraction is already gone.
+
+Only the conversion **before** the division gives 2.50.
+
+@@@ problem double-every-element
+@@ meta
+{
+  "title": "Double Every Element",
+  "difficulty": "Easy",
+  "topics": ["Arrays", "Loops"],
+  "params": [{"name": "nums", "type": "int[]"}],
+  "examples": [
+    {"input": ["[1,2,3]"], "output": "[2,4,6]"},
+    {"input": ["[-5,0,5]"], "output": "[-10,0,10]"}
+  ],
+  "hints": [
+    "Assign to the elements themselves: `nums[i] = nums[i] * 2;` (or the shorter `nums[i] *= 2;`).",
+    "The function returns nothing (`void`). The harness looks at the array after your function has run, and since arrays are not copied when they're passed to a function, it sees your changes."
+  ],
+  "constraints": ["0 <= numsSize <= 1000", "-10^6 <= nums[i] <= 10^6"]
+}
+@@ description
+Multiply every element of `nums` by 2, **in place**: change the array you are given rather than making a new one.
+
+```c
+void doubleAll(int nums[], int numsSize);
+```
+
+The function returns nothing (`void`). The test harness prints the array after your function has finished, so the result is the changed array.
+@@ prelude
+void doubleAll(int nums[], int numsSize);
+@@ starter
+void doubleAll(int nums[], int numsSize) {
+    // TODO: double each element of nums.
+}
+@@ solution
+void doubleAll(int nums[], int numsSize) {
+    for (int i = 0; i < numsSize; i++) {
+        nums[i] *= 2;
+    }
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int n;
+        int *nums = lc_read_int_array(&n);
+        doubleAll(nums, n);
+        lc_out_int_array(nums, n);
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[]
+
+[0]
+
+[7]
+
+[1,1,1,1]
+
+[-1000000,1000000]
+
+[3,-4,5,-6,7]
+@@ editorial
+## Approach
+
+```c
+void doubleAll(int nums[], int numsSize) {
+    for (int i = 0; i < numsSize; i++) {
+        nums[i] *= 2;
+    }
+}
+```
+
+### Why the caller sees the change
+In the Functions lesson, changing a parameter never affected the caller, because the function worked on a copy. Arrays are different: the function receives the *address* of the caller's first element, so `nums[i]` is the caller's element itself. The Pointers lesson explains how this works.
+
+### Common mistake
+`int x = nums[i]; x *= 2;` doubles a copy, `x`, and leaves the array unchanged. Assign the result back into `nums[i]`.
+
+@@@ problem manhattan-distance
+@@ meta
+{
+  "title": "Distance on a Grid",
+  "difficulty": "Easy",
+  "topics": ["Structs", "Functions"],
+  "params": [{"name": "a", "type": "Point"}, {"name": "b", "type": "Point"}],
+  "examples": [
+    {"input": ["[1,2]", "[4,6]"], "output": "7", "explanation": "3 steps along x (from 1 to 4) plus 4 steps along y (from 2 to 6)."},
+    {"input": ["[0,0]", "[-2,-3]"], "output": "5", "explanation": "Distances are never negative: 2 steps along x plus 3 along y."}
+  ],
+  "hints": [
+    "Reach the coordinates with a dot: `a.x`, `a.y`, `b.x`, `b.y`.",
+    "The distance along x is `a.x - b.x` without its sign. `abs()` from `<stdlib.h>` removes the sign; so does `if (dx < 0) dx = -dx;`."
+  ],
+  "constraints": ["-10^6 <= x, y <= 10^6"]
+}
+@@ description
+In a city laid out as a grid, you can only walk along the streets: left, right, up or down. The walking distance between two crossings is then the number of steps along x plus the number of steps along y. This is called the *Manhattan distance*.
+
+The two crossings are given as `struct Point` values. The struct is already defined for you (see *Declarations provided by the test harness* below):
+
+```c
+struct Point {
+    int x;
+    int y;
+};
+
+int manhattan(struct Point a, struct Point b);
+```
+
+In the examples, a point is written as `[x,y]`.
+@@ prelude
+struct Point {
+    int x;
+    int y;
+};
+
+int manhattan(struct Point a, struct Point b);
+@@ starter
+#include <stdlib.h>
+
+// struct Point { int x; int y; } is already defined for you.
+
+int manhattan(struct Point a, struct Point b) {
+    // TODO: add the distance along x and the distance along y.
+    return 0;
+}
+@@ solution
+#include <stdlib.h>
+
+int manhattan(struct Point a, struct Point b) {
+    return abs(a.x - b.x) + abs(a.y - b.y);
+}
+@@ driver
+#include "lc_driver.h"
+
+int main(void)
+{
+    while (lc_next_case()) {
+        int na, nb;
+        int *pa = lc_read_int_array(&na);
+        int *pb = lc_read_int_array(&nb);
+        struct Point a = { pa[0], pa[1] };
+        struct Point b = { pb[0], pb[1] };
+        lc_out_int(manhattan(a, b));
+        lc_end_case();
+    }
+    return lc_finish();
+}
+@@ tests
+[0,0]
+[0,0]
+
+[1000000,1000000]
+[-1000000,-1000000]
+
+[5,-5]
+[-5,5]
+
+[3,3]
+[3,10]
+
+[-1,0]
+[1,0]
+@@ editorial
+## Approach
+
+```c
+#include <stdlib.h>
+
+int manhattan(struct Point a, struct Point b) {
+    return abs(a.x - b.x) + abs(a.y - b.y);
+}
+```
+
+`a.x` reads the `x` field of the struct `a`. The difference `a.x - b.x` can be negative, depending on which point is further right, so `abs` (absolute value) removes the sign. The same goes for `y`.
+
+Without `abs`, using `if`:
+
+```c
+int dx = a.x - b.x;
+if (dx < 0) {
+    dx = -dx;
+}
+```
+
+### Copies again
+`a` and `b` are copies of the harness's structs, like any other argument. Changing `a.x` inside the function would not change anything for the caller.

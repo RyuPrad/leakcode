@@ -1,7 +1,7 @@
 <!-- {"title": "Where Your Data Lives: Stack, Heap and Static Memory", "summary": "The three places a C variable can live, how long each one lasts, and who is responsible for cleaning it up.", "practice": ["swap-two-integers", "find-the-first-match"]} -->
 # Where your data lives
 
-Every object in a C program lives in one of three kinds of memory. Knowing which one is the first step to every memory question: *how long does this exist, and who cleans it up?*
+In the Functions lesson you saw that every call gets a **stack frame** for its parameters and local variables, and that the frame disappears when the function returns. The stack is one of the three kinds of memory a C program uses. Every object lives in one of them, and knowing which one answers the two questions behind every memory bug: *how long does this exist, and who cleans it up?*
 
 | | **Stack** (automatic) | **Heap** (dynamic) | **Static** |
 |---|---|---|---|
@@ -10,6 +10,8 @@ Every object in a C program lives in one of three kinds of memory. Knowing which
 | Destroyed | **automatically** when the function returns | **only** when you call `free` | when the program ends |
 | Size known | at compile time | at run time | at compile time |
 | Typical size limit | ~1–8 MB in total | most of your RAM | fixed |
+
+The program below uses all three. It also uses the two heap functions you'll study in detail in the *malloc and free* lesson: `malloc(n * sizeof *arr)` asks for enough bytes to hold `n` ints and returns the address of the first one (so the result goes into a pointer), and `free(a)` gives those bytes back. `int counter` is declared outside any function, which makes it a **global** variable: it lives in static memory.
 
 ```c
 #include <stdio.h>
@@ -33,13 +35,15 @@ int main(void) {
 }
 ```
 
+> **Try it:** press *Visualize* and step through. The stack column shows `makeArray`'s frame appear and vanish; the heap column shows the block that outlives it.
+
 ## The stack: free, fast and short-lived
 
 Each function call gets a *stack frame* holding its parameters and locals. When the function returns, the whole frame is popped in one step. That is why locals are so cheap, and why **you must never keep a pointer to a local after its function has returned**: the memory will be reused by the next call.
 
 ## The heap: you are in charge
 
-`malloc` hands you a block that stays valid until you pass it to `free`. Nothing frees it for you, there is no garbage collector, so every block needs an **owner**: a piece of code responsible for freeing it exactly once.
+`malloc` hands you a block that stays valid until you pass it to `free`. Nothing frees it for you: unlike Python or Java, C has no *garbage collector* that cleans up memory you no longer use. So every block needs an **owner**: a piece of code responsible for freeing it exactly once.
 
 Three ways this goes wrong, and which LeakCode reports for you:
 

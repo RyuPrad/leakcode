@@ -1,6 +1,29 @@
 <!-- {"title": "malloc, calloc, realloc and free", "summary": "The four functions of the C heap, the idioms that keep you out of trouble, and how to make ownership explicit.", "practice": ["duplicate-a-string", "make-a-range", "filter-even-numbers", "dynamic-array", "fix-the-realloc-bug"]} -->
 # malloc, calloc, realloc and free
 
+So far all your variables lived on the stack, and that has two limits. A local variable disappears when its function returns, so a function can't build an array and hand it back. And an array's size is fixed when you write the program, while the amount of data often depends on what happens while it runs (how many lines are in a file, how many items the user adds).
+
+The **heap** solves both. You ask for a number of bytes while the program runs, you get back the address of a fresh block of memory, and that block stays yours until you give it back. Here is the whole cycle:
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void) {
+    int n = 4;                                   // could come from the user
+    int *nums = malloc(n * sizeof(int));         // ask for room for n ints
+    if (nums == NULL) return 1;                  // no memory left (rare, but possible)
+    for (int i = 0; i < n; i++) {
+        nums[i] = i * 10;                        // use it like an array
+    }
+    printf("%d %d\n", nums[0], nums[3]);
+    free(nums);                                  // give it back when you're done
+    return 0;
+}
+```
+
+> **Try it:** press *Visualize*. The block appears in the heap column when `malloc` runs (its contents start as `?`, garbage), and it's marked freed when `free` runs.
+
 The heap is managed through four functions from `<stdlib.h>`:
 
 | Function | What it does | Contents of the new memory |
@@ -21,7 +44,7 @@ if (arr == NULL) {
 }
 ```
 
-- `sizeof *arr` is "the size of whatever `arr` points to": it stays correct if you later change the type.
+- `sizeof *arr` is "the size of whatever `arr` points to", here `sizeof(int)`. It stays correct if you later change the type, which is why experienced programmers prefer it.
 - In C, don't cast `malloc`'s result. `void *` converts implicitly, and the cast only hides mistakes.
 - `n * sizeof *arr` can overflow for huge `n`. `calloc(n, sizeof *arr)` checks for that.
 

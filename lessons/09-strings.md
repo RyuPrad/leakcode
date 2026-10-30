@@ -1,13 +1,15 @@
 <!-- {"title": "C Strings: Bytes with a Zero at the End", "summary": "Why every string needs one more byte than its length, where string literals live, and which library functions will happily overflow your buffers.", "practice": ["string-length", "reverse-a-string", "safe-string-copy", "duplicate-a-string", "fix-the-off-by-one"]} -->
 # C strings: bytes with a zero at the end
 
-C has no string type. A "string" is a sequence of `char`s that ends at the first byte equal to `0`, written `'\0'` (the *null terminator*). The terminator is how every function finds the end.
+You met strings briefly in the Arrays lesson. C has no special string type: a "string" is a sequence of `char`s that ends at the first byte equal to `0`, written `'\0'` (the *null terminator*). The terminator is how every function finds the end. The functions that work on strings, such as `strlen` (length) and `strcpy` (copy), come from `#include <string.h>`.
 
 ```
 "cat"  →  'c' 'a' 't' '\0'      4 bytes, length 3
 ```
 
 **A string of length n needs n + 1 bytes.** Most string bugs come from forgetting this.
+
+In the program below, `%zu` is the `printf` placeholder for sizes (the type `size_t` that `strlen` and `sizeof` give back), and `\"` puts a quote character inside a string.
 
 ```c
 #include <stdio.h>
