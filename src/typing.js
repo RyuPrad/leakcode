@@ -35,21 +35,30 @@ function stripComments(line, inBlock) {
   return { text: out, open: inBlock };
 }
 
-function cleanCode(code) {
+// Tabs become spaces; comments (unless kept), trailing spaces, blank lines and
+// the indentation all lines share are removed.
+function cleanCode(code, keepComments = false) {
   const lines = [];
   let inBlock = false;
-  for (const raw of code.replace(/\t/g, '    ').split('\n')) {
-    const r = stripComments(raw, inBlock);
+  for (const raw of code.replace(/\r/g, '').replace(/\t/g, '    ').split('\n')) {
+    const r = keepComments ? { text: raw, open: false } : stripComments(raw, inBlock);
     inBlock = r.open;
     const line = r.text.replace(/\s+$/, '');
     if (line.trim()) lines.push(line);
   }
+  if (!lines.length) return '';
   const indent = Math.min(...lines.map((l) => l.length - l.trimStart().length));
   return lines.map((l) => l.slice(indent)).join('\n');
 }
 
 function lengthOf(lines) {
   return lines <= 6 ? 'short' : lines <= 14 ? 'medium' : 'long';
+}
+
+// A text the user picked (a lesson's code block, a solution, pasted code).
+function prepareText(code, keepComments) {
+  const text = cleanCode(String(code || ''), keepComments);
+  return { code: text, length: lengthOf(text ? text.split('\n').length : 0) };
 }
 
 // [{ id, source, length, code }]: every distinct, typeable C snippet.
@@ -82,4 +91,4 @@ function typingSnippets(lessons, vizExamples, playgroundExamples) {
   return out;
 }
 
-module.exports = { typingSnippets, cleanCode };
+module.exports = { typingSnippets, cleanCode, prepareText };

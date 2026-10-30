@@ -3,7 +3,7 @@
 import { h, icon, clear, statusIcon, diffClass } from '../util.js';
 import { state, api, problemStatus } from '../state.js';
 import { renderMarkdown } from '../markdown.js';
-import { openInPlayground, openInVisualizer } from '../actions.js';
+import { openInPlayground, openInVisualizer, openInTyping } from '../actions.js';
 
 let lessonsCache = null;
 
@@ -76,7 +76,11 @@ export function renderLesson(root, id) {
     const next = lessons[idx + 1];
     const practice = lesson.practice.map((pid) => state.byId.get(pid)).filter(Boolean);
     main.append(h('article', { class: 'reader-article' },
-      renderMarkdown(lesson.body, { onTryIt: (code) => openInPlayground(code), onVisualize: (code) => openInVisualizer(code) }),
+      renderMarkdown(lesson.body, {
+        onTryIt: (code) => openInPlayground(code),
+        onVisualize: (code) => openInVisualizer(code),
+        onType: (code) => openInTyping(code, { source: `Lesson ${lesson.number}: ${lesson.title}`, href: `#/learn/${id}` }),
+      }),
       practice.length ? h('div', { class: 'card practice' },
         h('h3', null, 'Practice'),
         practice.map((p) => h('div', { class: 'prow', onclick: () => { location.hash = `#/problem/${p.id}`; } },

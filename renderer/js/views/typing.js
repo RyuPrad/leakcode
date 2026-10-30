@@ -2,8 +2,9 @@
 // lessons, and see your speed and accuracy. Letters light up as you type them
 // correctly and turn red when you miss.
 
-import { h, icon } from '../util.js';
+import { h, icon, toast } from '../util.js';
 import { api } from '../state.js';
+import { takePendingTyping } from '../actions.js';
 
 const TIMES = [15, 30, 60, 120];
 const COUNTS = [10, 25, 50, 100];
@@ -124,7 +125,77 @@ export function renderTyping(root) {
         opt('symbols', cfg.symbols, () => { cfg.symbols = !cfg.symbols; }),
         opt('numbers', cfg.numbers, () => { cfg.numbers = !cfg.numbers; }));
     }
+    items.push(sep(), h('button', {
+      class: 'ty-opt choose',
+      title: 'Pick a snippet from a lesson, or paste your own code',
+      onclick: (e) => { e.currentTarget.blur(); openChooser(); },
+    }, icon('list'), 'choose…'));
     bar.replaceChildren(...items);
+  }
+
+  // ------------------------------------------------------------- choosing a text
+  function startSnippet(snippet) {
+    cfg.mode = 'code';
+    persist();
+    renderBar();
+    newTest(false, snippet);
+  }
+
+  async function startCustom(code, source, href, keepComments) {
+    const prepared = await api.prepareTyping(code, keepComments);
+    if (destroyed) return;
+    if (!prepared.code) {
+      toast('There is nothing to type in that text.', 'bad');
+      return;
+    }
+    startSnippet({ source, href, length: prepared.length, code: prepared.code });
+  }
+
+  function openChooser() {
+    const close = () => { backdrop.remove(); window.removeEventListener('keydown', onEsc, true); };
+    const onEsc = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
+    // the first lines that tell snippets apart (every program starts the same way)
+    const boring = /^(#include\b.*|int main\(void\) \{|[{}];?|return 0;)$/;
+    const preview = (code) => {
+      const lines = code.split('\n').map((l) => l.trim());
+      const telling = lines.filter((l) => !boring.test(l));
+      const text = (telling.length ? telling : lines).slice(0, 2).join('   ');
+      return text.length > 80 ? `${text.slice(0, 79)}…` : text;
+    };
+    const groups = new Map();
+    for (const s of snippets) {
+      if (!groups.has(s.source)) groups.set(s.source, []);
+      groups.get(s.source).push(s);
+    }
+    const area = h('textarea', { class: 'input ty-paste', spellcheck: 'false', placeholder: 'Paste any code here, for example a solution you wrote…' });
+    const keep = h('input', { type: 'checkbox' });
+    const backdrop = h('div', { class: 'modal-backdrop', onclick: (e) => { if (e.target === backdrop) close(); } },
+      h('div', { class: 'modal ty-choose', style: { width: 'min(760px, calc(100vw - 40px))' } },
+        h('div', { class: 'modal-head' }, h('h2', null, 'Choose what to type'),
+          h('button', { class: 'btn ghost icon-only', title: 'Close (Esc)', onclick: close }, icon('x'))),
+        h('div', { class: 'modal-body' },
+          h('div', { class: 'modal-section' },
+            h('h3', null, 'From the lessons and examples'),
+            h('div', { class: 'ty-choose-list' }, [...groups].map(([src, items]) => h('div', { class: 'ty-choose-group' },
+              h('div', { class: 'ty-choose-src' }, src),
+              items.map((s) => h('button', { class: 'ty-choose-item', onclick: () => { close(); startSnippet(s); } },
+                h('code', null, preview(s.code)),
+                h('span', { class: 'meta' }, `${s.code.split('\n').length} lines`))))))),
+          h('div', { class: 'modal-section' },
+            h('h3', null, 'Your own code'),
+            area,
+            h('div', { class: 'ty-paste-row' },
+              h('label', null, keep, 'Keep comments'),
+              h('button', {
+                class: 'btn primary',
+                onclick: () => {
+                  if (!area.value.trim()) { area.focus(); return; }
+                  close();
+                  startCustom(area.value, 'your own code', null, keep.checked);
+                },
+              }, icon('keyboard'), 'Type this'))))));
+    window.addEventListener('keydown', onEsc, true);
+    document.body.append(backdrop);
   }
 
   // ------------------------------------------------------------- tests
@@ -143,8 +214,8 @@ export function renderTyping(root) {
     return snippets[i];
   }
 
-  // A fresh test; `same` repeats the current text.
-  function newTest(same) {
+  // A fresh test; `same` repeats the current text, `chosen` is a snippet to type.
+  function newTest(same, chosen = null) {
     stopTimers();
     page.classList.remove('typing');
     results.style.display = 'none';
@@ -158,7 +229,8 @@ export function renderTyping(root) {
       keys: { total: 0, correct: 0 }, samples: [], secondErrors: 0, lastTyped: 0,
     };
     if (test.kind === 'code') {
-      test.snippet = keep && keep.snippet ? keep.snippet : nextSnippet();
+      test.snippet = chosen || (keep && keep.snippet) || nextSnippet();
+      if (test.snippet) test.key = `code ${test.snippet.length}`;    // a chosen snippet counts towards its length
       test.text = test.snippet ? test.snippet.code : '';
       test.state = new Uint8Array(test.text.length);    // 0 untyped, 1 right, 2 wrong, 3 filled in (indentation)
       test.pos = 0;
@@ -393,6 +465,9 @@ export function renderTyping(root) {
       const below = el.offsetTop - codeEl.scrollTop - (codeEl.clientHeight - 3 * lineH);
       if (below > 0) codeEl.scrollTop += below;
       if (el.offsetTop < codeEl.scrollTop) codeEl.scrollTop = el.offsetTop;
+      // and a long line's caret away from the right edge
+      if (el.offsetLeft - codeEl.scrollLeft > codeEl.clientWidth - 60) codeEl.scrollLeft = el.offsetLeft - codeEl.clientWidth + 160;
+      else if (el.offsetLeft < codeEl.scrollLeft + 20) codeEl.scrollLeft = Math.max(0, el.offsetLeft - 80);
       r = el.getBoundingClientRect();
     } else {
       // keep the current line second from the top
@@ -510,7 +585,9 @@ export function renderTyping(root) {
     cfg = { ...cfg, ...saved.settings };
     saved.settings = cfg;
     renderBar();
-    newTest(false);
+    const pending = takePendingTyping();      // a lesson's "Type it" button
+    if (pending) startCustom(pending.code, pending.source, pending.href, false);
+    else newTest(false);
   })();
 
   return {

@@ -47,6 +47,20 @@ export function takePendingVisualizer() {
   return p;
 }
 
+// Code to practise in the Typing tab; `from` is { source, href } to show where it came from.
+let pendingTyping = null;
+
+export function openInTyping(code, from = {}) {
+  pendingTyping = { code, source: from.source || null, href: from.href || null };
+  location.hash = '#/typing';
+}
+
+export function takePendingTyping() {
+  const p = pendingTyping;
+  pendingTyping = null;
+  return p;
+}
+
 export function takePendingPlaygroundCode() {
   const code = pendingPlaygroundCode;
   pendingPlaygroundCode = null;

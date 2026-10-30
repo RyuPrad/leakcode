@@ -847,7 +847,20 @@ details.prelude pre { margin-top: 8px; }
 .ty-opt { background: none; border: none; padding: 4px 9px; border-radius: 6px; color: var(--text-faint); cursor: pointer; }
 .ty-opt:hover { color: var(--text); }
 .ty-opt.on { color: var(--accent); }
+.ty-opt.choose { display: inline-flex; align-items: center; gap: 5px; }
+.ty-opt.choose .icon { width: 14px; height: 14px; }
 .ty-page.typing .ty-bar, .ty-page.typing .ty-hint { opacity: 0; pointer-events: none; }
+.ty-choose .modal-body { padding-top: 0; }
+.ty-choose-list { max-height: min(44vh, 420px); overflow-y: auto; margin: 0 -8px; padding: 0 8px; }
+.ty-choose-group + .ty-choose-group { margin-top: 10px; }
+.ty-choose-src { font-size: 12px; font-weight: 600; color: var(--text-dim); margin: 4px 2px; }
+.ty-choose-item { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: 7px; padding: 6px 8px; cursor: pointer; color: var(--text); }
+.ty-choose-item:hover { background: var(--bg-hover); border-color: var(--border); }
+.ty-choose-item code { flex: 1; min-width: 0; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ty-choose-item .meta { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
+.ty-paste { width: 100%; min-height: 110px; font-family: var(--mono); font-size: 13px; resize: vertical; }
+.ty-paste-row { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
+.ty-paste-row label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-dim); cursor: pointer; }
 .ty-stage { flex: 1; width: min(1080px, 100%); display: flex; flex-direction: column; justify-content: center; padding-bottom: 40px; }
 .ty-top { display: flex; align-items: flex-end; gap: 18px; height: 38px; }
 .ty-live { font-family: var(--mono); font-size: 26px; line-height: 1; color: var(--accent); }

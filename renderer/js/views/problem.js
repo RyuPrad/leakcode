@@ -9,6 +9,7 @@ import { createEditor, setCompileMarkers, setRuntimeMarks, clearMarks, revealLin
 import { renderMarkdown, codeBlock } from '../markdown.js';
 import { renderFatal, renderLeaks, renderDiagnostics, marksFor, VERDICTS } from '../diagnose.js';
 import { openSettings } from './settings.js';
+import { openInTyping } from '../actions.js';
 
 const MAX_CASES = 8;
 
@@ -189,8 +190,10 @@ export function renderProblem(root, id) {
     const sol = await api.getSolution(id);
     return [
       renderMarkdown(sol.editorial || '_No editorial yet._'),
-      h('div', { class: 'md' }, h('h2', null, 'Reference solution')),
-      codeBlock(sol.solution.trim()),
+      h('div', { class: 'md' }, h('h2', null, 'Reference solution'),
+        codeBlock(sol.solution.trim(), {
+          onType: (code) => openInTyping(code, { source: `${problem.number}. ${problem.title} (reference solution)`, href: `#/problem/${id}` }),
+        })),
     ];
   }
 

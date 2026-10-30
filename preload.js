@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('leakcode', {
   saveVisualizer: call('visualizer:save'),
   getTyping: call('typing:get'),
   saveTyping: call('typing:save'),
+  prepareTyping: call('typing:prepare'),
   listLessons: call('lessons:list'),
   getLesson: call('lesson:get'),
   setSettings: call('settings:set'),

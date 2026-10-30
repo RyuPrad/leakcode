@@ -7,7 +7,7 @@ const path = require('path');
 const { Judge, CompilerMissingError } = require('./src/judge');
 const { loadProblems, publicProblem, summary } = require('./src/problems');
 const { loadLessons, loadExamples } = require('./src/content');
-const { typingSnippets } = require('./src/typing');
+const { typingSnippets, prepareText } = require('./src/typing');
 const { Store } = require('./src/store');
 
 const ROOT = __dirname;
@@ -147,6 +147,7 @@ function registerIpc() {
   ipcMain.handle('visualizer:save', (_e, state) => store.saveVisualizer(state));
   ipcMain.handle('typing:get', () => ({ state: store.data.typing, snippets }));
   ipcMain.handle('typing:save', (_e, state) => store.saveTyping(state));
+  ipcMain.handle('typing:prepare', (_e, code, keepComments) => prepareText(code, Boolean(keepComments)));
 
   ipcMain.handle('lessons:list', () => lessons.map(({ body, ...rest }) => rest));
   ipcMain.handle('lesson:get', (_e, id) => {
