@@ -1,6 +1,6 @@
 # LeakCode
 
-A Windows desktop app for learning C and memory management, starting from zero: 14 lessons (six on C basics for complete beginners, then pointers and memory), a **memory visualizer** that runs your program line by line and draws its stack, heap and pointers, 58 hands-on exercises in 10 chapters, and a playground. Every program you run is checked for leaks, buffer overflows, use-after-free, double frees and other memory bugs, and each report points to the exact line.
+A Windows desktop app for learning C and memory management, starting from zero: 14 lessons (six on C basics for complete beginners, then pointers and memory), a **memory visualizer** that runs your program line by line and draws its stack, heap and pointers, 58 hands-on exercises in 10 chapters, **typing practice** with C words and real snippets from the lessons, and a playground. Every program you run is checked for leaks, buffer overflows, use-after-free, double frees and other memory bugs, and each report points to the exact line.
 
 ## Requirements
 
@@ -24,6 +24,7 @@ If Electron doesn't start after `npm install`, its binary download was skipped (
 | Problem and lesson loading, user data | `src/problems.js`, `src/content.js`, `src/store.js` |
 | C runtime: checking allocator, crash reporter, test harness | `runtime/` |
 | Visualizer: line-by-line tracing of stack frames, heap blocks and pointers | `runtime/lc_trace.c`, `renderer/js/views/visualize.js` |
+| Typing practice: C words and snippets taken from the lessons and examples | `src/typing.js`, `renderer/js/views/typing.js` |
 | UI (Monaco editor, views) | `renderer/` |
 | Problems (one file per chapter) | `problems/*.lc` |
 | Lessons | `lessons/*.md` |

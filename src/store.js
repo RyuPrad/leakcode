@@ -46,6 +46,7 @@ class Store {
       settings: { ...DEFAULT_SETTINGS, ...(data.settings || {}) },
       playground: data.playground || null,
       visualizer: data.visualizer || null,
+      typing: data.typing || null,
       activity: data.activity || {},
       testcases: data.testcases || {},
       lessonsRead: data.lessonsRead || {},
@@ -146,12 +147,18 @@ class Store {
     this.scheduleSave();
   }
 
+  saveTyping(state) {
+    this.data.typing = state;
+    this.scheduleSave();
+  }
+
   resetProgress() {
     this.data.progress = {};
     this.data.drafts = {};
     this.data.activity = {};
     this.data.testcases = {};
     this.data.lessonsRead = {};
+    this.data.typing = null;
     this.submissions = {};
     this.flush();
   }

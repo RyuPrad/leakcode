@@ -7,6 +7,7 @@ const path = require('path');
 const { Judge, CompilerMissingError } = require('./src/judge');
 const { loadProblems, publicProblem, summary } = require('./src/problems');
 const { loadLessons, loadExamples } = require('./src/content');
+const { typingSnippets } = require('./src/typing');
 const { Store } = require('./src/store');
 
 const ROOT = __dirname;
@@ -41,13 +42,14 @@ protocol.registerSchemesAsPrivileged([{
 if (!app.requestSingleInstanceLock()) app.quit();
 
 let win = null;
-let store, judge, catalog, lessons, examples, vizExamples;
+let store, judge, catalog, lessons, examples, vizExamples, snippets;
 
 function loadContent() {
   catalog = loadProblems(path.join(ROOT, 'problems'));
   lessons = loadLessons(path.join(ROOT, 'lessons'));
   examples = loadExamples(path.join(ROOT, 'playground', 'examples.lc'));
   vizExamples = loadExamples(path.join(ROOT, 'visualizer', 'examples.lc'));
+  snippets = typingSnippets(lessons, vizExamples, examples);
 }
 
 function compilerProblem(e) {
@@ -143,6 +145,8 @@ function registerIpc() {
   });
   ipcMain.handle('visualizer:get', () => ({ state: store.data.visualizer, examples: vizExamples }));
   ipcMain.handle('visualizer:save', (_e, state) => store.saveVisualizer(state));
+  ipcMain.handle('typing:get', () => ({ state: store.data.typing, snippets }));
+  ipcMain.handle('typing:save', (_e, state) => store.saveTyping(state));
 
   ipcMain.handle('lessons:list', () => lessons.map(({ body, ...rest }) => rest));
   ipcMain.handle('lesson:get', (_e, id) => {

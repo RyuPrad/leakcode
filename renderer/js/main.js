@@ -8,6 +8,7 @@ import { renderProblem } from './views/problem.js';
 import { renderLearn, renderLesson } from './views/learn.js';
 import { renderPlayground } from './views/playground.js';
 import { renderVisualize } from './views/visualize.js';
+import { renderTyping } from './views/typing.js';
 import { openSettings } from './views/settings.js';
 
 let current = null;
@@ -16,6 +17,7 @@ const NAV = [
   { id: 'learn', label: 'Learn', icon: 'book', match: ['learn'] },
   { id: 'visualize', label: 'Visualize', icon: 'eye', match: ['visualize'] },
   { id: 'practice', label: 'Practice', icon: 'list', match: ['practice', 'problem'] },
+  { id: 'typing', label: 'Typing', icon: 'keyboard', match: ['typing'] },
   { id: 'playground', label: 'Playground', icon: 'terminal', match: ['playground'] },
 ];
 
@@ -56,6 +58,7 @@ function route() {
   else if (view === 'learn') current = renderLearn(root);
   else if (view === 'playground') current = renderPlayground(root);
   else if (view === 'visualize') current = renderVisualize(root);
+  else if (view === 'typing') current = renderTyping(root);
   else if (view === 'practice' || view === 'problems') current = renderProblems(root);
   else current = renderLearn(root);
   renderNav();
