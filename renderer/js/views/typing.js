@@ -85,6 +85,7 @@ export function renderTyping(root) {
   let test = null;
   let timer = null, endTimer = null;
   let snippetIndex = -1;
+  let ready = false;              // settings and snippets loaded
 
   // ------------------------------------------------------------- layout
   const bar = h('div', { class: 'ty-bar' });
@@ -585,7 +586,8 @@ export function renderTyping(root) {
     cfg = { ...cfg, ...saved.settings };
     saved.settings = cfg;
     renderBar();
-    const pending = takePendingTyping();      // a lesson's "Type it" button
+    ready = true;
+    const pending = takePendingTyping();      // a "Type it" button
     if (pending) startCustom(pending.code, pending.source, pending.href, false);
     else newTest(false);
   })();
@@ -594,6 +596,11 @@ export function renderTyping(root) {
     hide() {
       // the clock would keep running while you are away: start the same text over
       if (test && test.started && !test.finished) newTest(true);
+    },
+    show() {
+      // code sent by a "Type it" button while this page stayed open
+      const pending = ready ? takePendingTyping() : null;
+      if (pending) startCustom(pending.code, pending.source, pending.href, false);
     },
     destroy() {
       destroyed = true;

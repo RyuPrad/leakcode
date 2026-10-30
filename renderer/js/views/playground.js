@@ -213,6 +213,17 @@ export function renderPlayground(root) {
   })();
 
   return {
+    show() {
+      // code sent by a lesson's "Run in Playground" while this page stayed open
+      const pending = editor ? takePendingPlaygroundCode() : null;
+      if (pending === null) return;
+      replaceCode(`${pending}\n`);
+      save();
+      result = null;
+      renderOutHead();
+      renderOut();
+      editor.focus();
+    },
     destroy() {
       destroyed = true;
       window.removeEventListener('keydown', onKey);

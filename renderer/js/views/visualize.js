@@ -778,6 +778,15 @@ export function renderVisualize(root) {
     hide() {
       stop();                 // pause Play while you are away
     },
+    show() {
+      // code sent by a "Visualize" button while this page stayed open
+      const pending = editor ? takePendingVisualizer() : null;
+      if (!pending) return;
+      replaceCode(pending.code);
+      stdin.value = pending.stdin || '';
+      save();
+      run();
+    },
     destroy() {
       destroyed = true;
       stop();
