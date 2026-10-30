@@ -178,6 +178,7 @@ export function renderPlayground(root) {
   }
 
   function onKey(e) {
+    if (root.classList.contains('hidden')) return;      // another tab is showing
     if (e.ctrlKey && e.key === 'Enter' && !e.defaultPrevented && !editorHost.contains(e.target)) {
       e.preventDefault();
       run();

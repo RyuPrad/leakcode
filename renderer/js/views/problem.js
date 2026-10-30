@@ -545,7 +545,7 @@ export function renderProblem(root, id) {
   }
 
   function onKey(e) {
-    if (!e.ctrlKey || e.defaultPrevented || editorHost.contains(e.target)) return;
+    if (!e.ctrlKey || e.defaultPrevented || editorHost.contains(e.target) || root.classList.contains('hidden')) return;
     if (e.key === "'") { e.preventDefault(); doRun(); }
     else if (e.key === 'Enter') { e.preventDefault(); doSubmit(); }
   }

@@ -222,7 +222,10 @@ textarea.input { height: auto; padding: 8px 10px; font-family: var(--mono); font
 
 /* ------------------------------------------------------------ pages */
 
-#view { height: calc(100% - var(--topbar)); overflow: hidden; }
+#view { position: relative; height: calc(100% - var(--topbar)); overflow: hidden; }
+/* one page per tab; hidden pages keep their layout, so scroll positions survive */
+.view-host { position: absolute; inset: 0; }
+.view-host.hidden { visibility: hidden; pointer-events: none; }
 .page { height: 100%; overflow-y: auto; }
 .page-inner { max-width: 1160px; margin: 0 auto; padding: 28px 28px 60px; }
 .page-title { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 4px; }

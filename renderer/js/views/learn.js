@@ -18,6 +18,7 @@ export function renderLearn(root) {
     h('div', { class: 'path-num' }, icon(ic)),
     h('div', null, h('h3', null, `${n}. ${title}`), h('p', null, text)));
   const resume = h('div', { class: 'learn-resume' });
+  const groups = h('div');
   const inner = h('div', { class: 'page-inner' },
     h('h1', { class: 'page-title' }, 'Learn C & memory management'),
     h('p', { class: 'page-sub' }, 'No C experience needed: the first lessons start from zero. Each lesson is short. Read it, watch its examples run in the visualizer, then practise.'),
@@ -25,10 +26,17 @@ export function renderLearn(root) {
     h('div', { class: 'learn-path' },
       step(1, 'book', 'Read', 'Start with Your First C Program. Each lesson explains one idea with programs you can run from the page.', '#/learn/first-program'),
       step(2, 'eye', 'Watch', 'The visualizer runs code one line at a time and draws every variable, heap block and pointer.', '#/visualize'),
-      step(3, 'list', 'Practise', 'Start with the C Basics exercises. Every run is checked, and mistakes are pointed out line by line.', '#/practice')));
+      step(3, 'list', 'Practise', 'Start with the C Basics exercises. Every run is checked, and mistakes are pointed out line by line.', '#/practice')),
+    groups);
   page.append(inner);
   root.append(page);
-  lessonList().then((lessons) => {
+
+  // The next lesson and each lesson's progress (refreshed when you come back to this tab).
+  async function fill() {
+    const lessons = await lessonList();
+    const top = page.scrollTop;
+    resume.replaceChildren();
+    groups.replaceChildren();
     const next = lessons.find((l) => !state.lessonsRead[l.id]);
     if (next) {
       resume.append(h('a', { class: 'btn primary', href: `#/learn/${next.id}` },
@@ -38,7 +46,7 @@ export function renderLearn(root) {
     for (const l of lessons) {
       if (l.part || !grid) {
         grid = h('div', { class: 'lesson-grid' });
-        inner.append(h('h2', { class: 'section-title' }, l.part || 'Lessons'), grid);
+        groups.append(h('h2', { class: 'section-title' }, l.part || 'Lessons'), grid);
       }
       const solved = l.practice.filter((id) => problemStatus(id) === 'solved').length;
       grid.append(h('div', { class: 'card lesson-card', onclick: () => { location.hash = `#/learn/${l.id}`; } },
@@ -51,8 +59,10 @@ export function renderLearn(root) {
           h('span', null, `${l.minutes} min read`),
           l.practice.length ? h('span', null, `${solved}/${l.practice.length} exercises solved`) : null)));
     }
-  });
-  return {};
+    page.scrollTop = top;
+  }
+  fill();
+  return { show: fill };
 }
 
 export function renderLesson(root, id) {

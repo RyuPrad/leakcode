@@ -6,6 +6,7 @@ import { completionItems, hoverFor } from './cdocs.js';
 
 let setupDone = false;
 const editors = new Set();
+let editorCount = 0;
 
 export async function getMonaco() {
   const monaco = await window.monacoReady;
@@ -126,9 +127,13 @@ export async function createEditor(host, { value, readOnly = false, onChange, ke
   // on Windows a model created from text without line breaks defaults to CRLF
   editor.getModel().setEOL(monaco.editor.EndOfLineSequence.LF);
   if (onChange) editor.onDidChangeModelContent(() => onChange(editor.getValue()));
-  if (keys.run) editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Quote, keys.run);
-  if (keys.submit) editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, keys.submit);
-  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {});
+  // Monaco's addCommand keybindings are shared by every editor (the last one
+  // added wins) unless they depend on a context key only this editor has.
+  const scope = `lcEditor${++editorCount}`;
+  editor.createContextKey(scope, true);
+  if (keys.run) editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Quote, keys.run, scope);
+  if (keys.submit) editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, keys.submit, scope);
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {}, scope);
   editors.add(editor);
   editor.onDidDispose(() => editors.delete(editor));
   editor.lcDecorations = editor.createDecorationsCollection([]);

@@ -727,6 +727,7 @@ export function renderVisualize(root) {
   }
 
   function onKey(e) {
+    if (root.classList.contains('hidden')) return;      // another tab is showing
     if (e.ctrlKey && e.key === 'Enter' && !e.defaultPrevented && !editorHost.contains(e.target)) {
       e.preventDefault();
       run();
@@ -774,6 +775,9 @@ export function renderVisualize(root) {
   })();
 
   return {
+    hide() {
+      stop();                 // pause Play while you are away
+    },
     destroy() {
       destroyed = true;
       stop();

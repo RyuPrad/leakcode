@@ -548,7 +548,7 @@ export function renderTyping(root) {
 
   // ------------------------------------------------------------- keys
   function onKey(e) {
-    if (destroyed || !test) return;
+    if (destroyed || !test || root.classList.contains('hidden')) return;     // another tab is showing
     if (document.querySelector('.modal-backdrop')) return;
     const target = e.target;
     if (target && target.closest && target.closest('input, textarea, select')) return;
@@ -591,6 +591,10 @@ export function renderTyping(root) {
   })();
 
   return {
+    hide() {
+      // the clock would keep running while you are away: start the same text over
+      if (test && test.started && !test.finished) newTest(true);
+    },
     destroy() {
       destroyed = true;
       stopTimers();
