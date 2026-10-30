@@ -33,7 +33,7 @@ struct TreeNode {
 struct TreeNode *bstInsert(struct TreeNode *root, int val);
 ```
 
-The harness inserts each number of `values` in order (`root = bstInsert(root, v)`), prints the tree in level order (like LeetCode, `null` marks a missing child), and checks that each insertion allocated exactly one node.
+The harness inserts each number of `values` in order (`root = bstInsert(root, v)`), prints the tree in level order (`null` marks a missing child), and checks that each insertion allocated exactly one node.
 
 Insert the new node as a leaf: don't rebalance or restructure the tree.
 @@ prelude

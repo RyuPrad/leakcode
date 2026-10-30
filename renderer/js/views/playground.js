@@ -5,7 +5,7 @@ import { h, icon, clear, fmtBytes, fmtMs, plural, debounce, makeResizable, confi
 import { api } from '../state.js';
 import { createEditor, setCompileMarkers, setRuntimeMarks, clearMarks, revealLine } from '../editor.js';
 import { renderFatal, renderLeaks, renderDiagnostics, marksFor, VERDICTS } from '../diagnose.js';
-import { takePendingPlaygroundCode } from '../actions.js';
+import { takePendingPlaygroundCode, openInVisualizer } from '../actions.js';
 import { openSettings } from './settings.js';
 
 export function renderPlayground(root) {
@@ -18,6 +18,10 @@ export function renderPlayground(root) {
 
   const editorHost = h('div', { class: 'editor-host' });
   const runBtn = h('button', { class: 'btn primary', title: 'Compile and run (Ctrl+Enter)', onclick: () => run() }, icon('play'), 'Run');
+  const vizBtn = h('button', {
+    class: 'btn', title: 'Step through this program and watch its memory',
+    onclick: () => editor && openInVisualizer(editor.getValue(), stdin.value),
+  }, icon('eye'), 'Visualize');
   const exampleSelect = h('select', {
     class: 'input', style: { height: '28px', fontSize: '13px' },
     onchange: async (e) => {
@@ -36,7 +40,7 @@ export function renderPlayground(root) {
       h('span', { class: 'lang' }, icon('code'), 'main.c'),
       h('div', { class: 'grow' }),
       exampleSelect,
-      h('div', { class: 'run-bar', style: { marginLeft: '8px' } }, runBtn)),
+      h('div', { class: 'run-bar', style: { marginLeft: '8px' } }, vizBtn, runBtn)),
     editorHost);
   const stdinPane = h('div', { class: 'pane pane-stdin' }, h('div', { class: 'pane-head' }, h('span', { class: 'tab active' }, icon('file'), 'Input (stdin)')), stdin);
   const outPane = h('div', { class: 'pane pane-out' }, outHead, outBody);

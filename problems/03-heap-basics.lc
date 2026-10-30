@@ -129,7 +129,7 @@ Return a new array holding the integers `start, start+1, ..., end-1`, and store 
 int *makeRange(int start, int end, int *returnSize);
 ```
 
-A pointer returned from a function carries no length. The common C convention, also used by every LeetCode C problem, is an extra **out-parameter** for the size: the caller passes the address of an `int`, and you fill it in.
+A pointer returned from a function carries no length. The common C convention is an extra **out-parameter** for the size: the caller passes the address of an `int`, and you fill it in.
 
 If `end <= start` the range is empty.
 @@ prelude

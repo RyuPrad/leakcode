@@ -41,12 +41,13 @@ protocol.registerSchemesAsPrivileged([{
 if (!app.requestSingleInstanceLock()) app.quit();
 
 let win = null;
-let store, judge, catalog, lessons, examples;
+let store, judge, catalog, lessons, examples, vizExamples;
 
 function loadContent() {
   catalog = loadProblems(path.join(ROOT, 'problems'));
   lessons = loadLessons(path.join(ROOT, 'lessons'));
   examples = loadExamples(path.join(ROOT, 'playground', 'examples.lc'));
+  vizExamples = loadExamples(path.join(ROOT, 'visualizer', 'examples.lc'));
 }
 
 function compilerProblem(e) {
@@ -132,6 +133,16 @@ function registerIpc() {
   });
   ipcMain.handle('playground:get', () => ({ state: store.data.playground, examples }));
   ipcMain.handle('playground:save', (_e, state) => store.savePlayground(state));
+
+  ipcMain.handle('visualizer:run', async (_e, code, stdin) => {
+    try {
+      return await judge.trace(code, stdin || '');
+    } catch (e) {
+      return compilerProblem(e);
+    }
+  });
+  ipcMain.handle('visualizer:get', () => ({ state: store.data.visualizer, examples: vizExamples }));
+  ipcMain.handle('visualizer:save', (_e, state) => store.saveVisualizer(state));
 
   ipcMain.handle('lessons:list', () => lessons.map(({ body, ...rest }) => rest));
   ipcMain.handle('lesson:get', (_e, id) => {

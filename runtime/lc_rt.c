@@ -64,6 +64,8 @@ struct LcBlock {
     int case_idx;
     unsigned char state, guarded, harness, readonly, by_realloc, adepth, fdepth;
     long long seq;
+    ULONG64 tmod;            /* visualizer: the last type a pointer gave it */
+    DWORD ttype;
     void *astack[LC_DEPTH];
     void *fstack[LC_DEPTH];
     LcBlock *hnext, *prev, *next;
@@ -79,7 +81,7 @@ typedef struct {
 } LcFrame;
 
 static struct {
-    int ready, judge;
+    int ready, judge, trace;
     HANDLE meta, canary_heap, scratch, out;
     CRITICAL_SECTION lock;
     LcBlock **table;
@@ -110,6 +112,8 @@ static struct {
 } G;
 
 static void lc_lazy_init(void);
+static void trace_event(LcBlock *blk, const char *what);
+static void trace_init(void);
 LC_NORETURN static void report_block_fatal(const char *kind, const char *title, LcBlock *b,
                                            const char *file, int line, const char *fmt, ...);
 
@@ -492,6 +496,7 @@ static void *block_alloc(size_t n, int zero, const char *file, int line, int har
     table_insert(b);
     list_push(&G.live, b);
     if (!harness) stats_on_alloc(n);
+    if (G.trace && !harness) trace_event(b, zero ? "calloc" : "malloc");
     LeaveCriticalSection(&G.lock);
     return (void *)b->user;
 }
@@ -550,6 +555,7 @@ static void release_block(LcBlock *b, const char *file, int line, int by_realloc
     b->fline = line;
     b->by_realloc = (unsigned char)by_realloc;
     b->fdepth = (unsigned char)CaptureStackBackTrace(2, LC_DEPTH, b->fstack, NULL);
+    if (G.trace) trace_event(b, by_realloc ? "realloc" : "free");
     if (!b->harness) {
         G.frees++;
         G.live_bytes -= b->size;
@@ -1242,6 +1248,7 @@ static void lc_lazy_init(void)
                             FILE_ATTRIBUTE_NORMAL, NULL);
     n = GetEnvironmentVariableA("LC_MODE", buf, sizeof buf);
     G.judge = n && n < sizeof buf && strcmp(buf, "judge") == 0;
+    G.trace = n && n < sizeof buf && strcmp(buf, "trace") == 0;
 
     GetModuleFileNameA(NULL, G.exe_dir, MAX_PATH);
     slash = strrchr(G.exe_dir, '\\');
@@ -1268,6 +1275,7 @@ static void lc_lazy_init(void)
     setvbuf(stdout, NULL, _IONBF, 0);
     atexit(lc_at_exit);
     if (G.judge) load_input();
+    if (G.trace) trace_init();
 }
 
 static int __cdecl lc_crt_init(void)
@@ -1758,3 +1766,6 @@ void lc_out_str_array(char *const *a, int n)
     for (i = 0; i < n; i++) lc_out_str(a[i]);
     lc_out_end();
 }
+
+/* step-by-step tracing for the visualizer (LC_MODE=trace) */
+#include "lc_trace.c"

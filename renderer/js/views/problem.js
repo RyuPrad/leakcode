@@ -121,7 +121,7 @@ export function renderProblem(root, id) {
       tab('solution', 'Solution', 'book'),
       tab('submissions', 'Submissions', 'history'),
       h('div', { class: 'grow' }),
-      h('button', { class: 'btn ghost sm icon-only', title: 'Problem list', onclick: () => { location.hash = '#/problems'; } }, icon('list')),
+      h('button', { class: 'btn ghost sm icon-only', title: 'Problem list', onclick: () => { location.hash = '#/practice'; } }, icon('list')),
       h('button', { class: 'btn ghost sm icon-only', title: prev ? `Previous: ${prev.title}` : '', disabled: !prev, onclick: () => { location.hash = `#/problem/${prev.id}`; } }, icon('left')),
       h('button', { class: 'btn ghost sm icon-only', title: next ? `Next: ${next.title}` : '', disabled: !next, onclick: () => { location.hash = `#/problem/${next.id}`; } }, icon('right')));
   }

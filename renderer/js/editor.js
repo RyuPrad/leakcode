@@ -123,6 +123,8 @@ export async function createEditor(host, { value, readOnly = false, onChange, ke
     suggest: { showWords: true },
     ...editorOptions(),
   });
+  // on Windows a model created from text without line breaks defaults to CRLF
+  editor.getModel().setEOL(monaco.editor.EndOfLineSequence.LF);
   if (onChange) editor.onDidChangeModelContent(() => onChange(editor.getValue()));
   if (keys.run) editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Quote, keys.run);
   if (keys.submit) editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, keys.submit);

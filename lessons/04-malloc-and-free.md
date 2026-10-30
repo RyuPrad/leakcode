@@ -91,7 +91,7 @@ void listAppend(List *list, Node *node);
 Common patterns:
 
 - **create / destroy pairs** (`createMatrix`/`freeMatrix`, `fopen`/`fclose`): the library frees what it allocated.
-- **caller frees** (`strdup`, most LeetCode C problems): documented in the function's contract.
+- **caller frees** (`strdup`, and many functions that return a new string or array): documented in the function's contract.
 - **borrow**: a `const T *` parameter is only used during the call. Copy it if you need it later.
 
 ## Seeing it in action

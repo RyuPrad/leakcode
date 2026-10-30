@@ -90,7 +90,7 @@ export function openSettings() {
                 emit('progress');
                 toast('Progress reset.');
                 close();
-                location.hash = '#/problems';
+                location.hash = '#/practice';
               },
             }, 'Reset…'))),
         h('div', { class: 'modal-section', style: { color: 'var(--text-faint)', fontSize: '12.5px' } },

@@ -7,19 +7,21 @@ import { renderProblems } from './views/problems.js';
 import { renderProblem } from './views/problem.js';
 import { renderLearn, renderLesson } from './views/learn.js';
 import { renderPlayground } from './views/playground.js';
+import { renderVisualize } from './views/visualize.js';
 import { openSettings } from './views/settings.js';
 
 let current = null;
 
 const NAV = [
-  { id: 'problems', label: 'Problems', icon: 'list', match: ['problems', 'problem'] },
   { id: 'learn', label: 'Learn', icon: 'book', match: ['learn'] },
+  { id: 'visualize', label: 'Visualize', icon: 'eye', match: ['visualize'] },
+  { id: 'practice', label: 'Practice', icon: 'list', match: ['practice', 'problem'] },
   { id: 'playground', label: 'Playground', icon: 'terminal', match: ['playground'] },
 ];
 
 function renderNav() {
   const nav = clear(document.getElementById('nav'));
-  const view = (location.hash.split('/')[1] || 'problems');
+  const view = (location.hash.split('/')[1] || 'learn');
   for (const item of NAV) {
     nav.append(h('a', { href: `#/${item.id}`, class: item.match.includes(view) ? 'active' : '' }, icon(item.icon), item.label));
   }
@@ -43,8 +45,8 @@ function renderTopRight() {
 }
 
 function route() {
-  const parts = (location.hash || '#/problems').split('/');
-  const view = parts[1] || 'problems';
+  const parts = (location.hash || '#/learn').split('/');
+  const view = parts[1] || 'learn';
   const arg = parts.slice(2).join('/');
   if (current && current.destroy) current.destroy();
   current = null;
@@ -53,7 +55,9 @@ function route() {
   else if (view === 'learn' && arg) current = renderLesson(root, arg);
   else if (view === 'learn') current = renderLearn(root);
   else if (view === 'playground') current = renderPlayground(root);
-  else current = renderProblems(root);
+  else if (view === 'visualize') current = renderVisualize(root);
+  else if (view === 'practice' || view === 'problems') current = renderProblems(root);
+  else current = renderLearn(root);
   renderNav();
 }
 

@@ -68,7 +68,7 @@ static struct TreeNode *lc_tree_node(int val)
     return t;
 }
 
-/* LeetCode-style level order with nulls: [1,2,3,null,4] */
+/* level order, null marking a missing child: [1,2,3,null,4] */
 static struct TreeNode *lc_tree_from_json(const LcJson *arr)
 {
     int n = lc_json_len(arr), i = 1, qh = 0, qt = 0;

@@ -1,0 +1,228 @@
+@@@ example pointers Variables and pointers
+#include <stdio.h>
+
+int main(void) {
+    int age = 20;
+    int *p = &age;      // p stores the address of age
+    *p = 21;            // write through the pointer
+    int copy = *p;      // read through the pointer
+    p = NULL;           // p no longer points anywhere
+    printf("age = %d, copy = %d\n", age, copy);
+    return 0;
+}
+
+@@@ example swap Swapping through pointers
+#include <stdio.h>
+
+void swap(int *a, int *b) {
+    int tmp = *a;       // a and b point into main's frame
+    *a = *b;
+    *b = tmp;
+}
+
+int main(void) {
+    int x = 1;
+    int y = 2;
+    swap(&x, &y);       // pass the addresses, not the values
+    printf("x = %d, y = %d\n", x, y);
+    return 0;
+}
+
+@@@ example arrays Arrays and pointer arithmetic
+#include <stdio.h>
+
+int main(void) {
+    int nums[5] = { 3, 1, 4, 1, 5 };
+    int *p = nums;           // same as &nums[0]
+    p = p + 2;               // moves 2 elements (8 bytes) forward
+    *p = 40;                 // nums[2] = 40
+    int *end = nums + 5;     // one past the last element
+    int sum = 0;
+    for (int *q = nums; q != end; q++) {
+        sum += *q;
+    }
+    printf("sum = %d\n", sum);
+    return 0;
+}
+
+@@@ example malloc malloc and free
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void) {
+    int n = 4;
+    int *squares = malloc(n * sizeof *squares);   // garbage until written
+    for (int i = 0; i < n; i++) {
+        squares[i] = i * i;
+    }
+    printf("squares[3] = %d\n", squares[3]);
+    free(squares);      // the block is given back...
+    squares = NULL;     // ...so forget its address
+    return 0;
+}
+
+@@@ example strings Strings: stack, heap and literals
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main(void) {
+    char word[8] = "cat";                     // an array in main's frame
+    const char *lit = "literal";              // points to read-only memory
+    char *copy = malloc(strlen(word) + 1);    // + 1 for the '\0'
+    strcpy(copy, word);
+    copy[0] = 'b';
+    printf("%s %s %s\n", word, copy, lit);
+    free(copy);
+    return 0;
+}
+
+@@@ example list Building and freeing a linked list
+#include <stdio.h>
+#include <stdlib.h>
+
+struct Node {
+    int value;
+    struct Node *next;
+};
+
+int main(void) {
+    struct Node *head = NULL;
+    for (int i = 1; i <= 3; i++) {
+        struct Node *n = malloc(sizeof *n);
+        n->value = i * 10;
+        n->next = head;     // the new node points to the old head
+        head = n;           // and becomes the new head
+    }
+    while (head != NULL) {
+        struct Node *next = head->next;   // save it before freeing
+        free(head);
+        head = next;
+    }
+    return 0;
+}
+
+@@@ example recursion Recursion and the call stack
+#include <stdio.h>
+
+int factorial(int n) {
+    if (n <= 1) {
+        return 1;
+    }
+    int smaller = factorial(n - 1);   // a new frame for every call
+    return n * smaller;
+}
+
+int main(void) {
+    int result = factorial(4);
+    printf("4! = %d\n", result);
+    return 0;
+}
+
+@@@ example structs Structs on the stack and on the heap
+#include <stdio.h>
+#include <stdlib.h>
+
+typedef struct {
+    char name[12];
+    int age;
+} Person;
+
+int main(void) {
+    Person a = { "Ada", 36 };         // the whole struct lives in main's frame
+    Person *b = malloc(sizeof *b);    // this one lives on the heap
+    *b = a;                           // copies every byte of the struct
+    b->age = 37;
+    Person *alias = b;                // two pointers, one block
+    alias->name[0] = 'E';
+    printf("%s %d / %s %d\n", a.name, a.age, b->name, b->age);
+    free(b);
+    return 0;
+}
+
+@@@ example realloc realloc can move your data
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void) {
+    int cap = 2;
+    int *items = malloc(cap * sizeof *items);
+    items[0] = 7;
+    items[1] = 8;
+    int *old = items;                               // remember the old address
+    cap = cap * 2;
+    items = realloc(items, cap * sizeof *items);    // may move the block
+    items[2] = 9;
+    printf("moved: %s\n", old == items ? "no" : "yes");   // old is dangling now
+    free(items);
+    return 0;
+}
+
+@@@ example matrix A 2D array built from pointers
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void) {
+    int rows = 2, cols = 3;
+    int **m = malloc(rows * sizeof *m);      // an array of row pointers
+    for (int r = 0; r < rows; r++) {
+        m[r] = malloc(cols * sizeof **m);    // one block per row
+        for (int c = 0; c < cols; c++) {
+            m[r][c] = r * cols + c;
+        }
+    }
+    printf("m[1][2] = %d\n", m[1][2]);
+    for (int r = 0; r < rows; r++) {
+        free(m[r]);                           // rows first...
+    }
+    free(m);                                  // ...then the array that held them
+    return 0;
+}
+
+@@@ example leak Bug: a memory leak
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+char *makeGreeting(const char *name) {
+    char *msg = malloc(strlen(name) + 8);    // "Hello, " + name + '\0'
+    strcpy(msg, "Hello, ");
+    strcat(msg, name);
+    return msg;
+}
+
+int main(void) {
+    char *a = makeGreeting("Ada");
+    a = makeGreeting("Linus");    // nothing points to the first block any more
+    printf("%s\n", a);
+    free(a);
+    return 0;
+}
+
+@@@ example dangling Bug: use after free
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void) {
+    int *score = malloc(sizeof *score);
+    *score = 100;
+    int *same = score;       // a second pointer to the same block
+    free(score);             // now both pointers are dangling
+    score = NULL;            // this fixes only one of them
+    printf("%d\n", *same);   // reads freed memory
+    return 0;
+}
+
+@@@ example overflow Bug: off-by-one overflow
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void) {
+    int n = 3;
+    int *a = malloc(n * sizeof *a);
+    for (int i = 0; i <= n; i++) {   // <= writes one element too many
+        a[i] = i;
+    }
+    free(a);
+    return 0;
+}

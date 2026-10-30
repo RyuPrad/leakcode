@@ -161,9 +161,9 @@ One allocation is faster and can't partially fail, but only the code that create
 @@@ problem transpose-matrix
 @@ meta
 {
-  "title": "Transpose a Matrix (LeetCode Style)",
+  "title": "Transpose a Matrix",
   "difficulty": "Medium",
-  "topics": ["2D arrays", "malloc", "LeetCode conventions"],
+  "topics": ["2D arrays", "malloc", "Out-parameters"],
   "params": [{"name": "matrix", "type": "int[][]"}],
   "examples": [
     {"input": ["[[1,2,3],[4,5,6]]"], "output": "[[1,4],[2,5],[3,6]]", "explanation": "A 2x3 matrix becomes 3x2: *returnSize = 3 and every (*returnColumnSizes)[i] = 2."},
@@ -185,7 +185,7 @@ int **transpose(int **matrix, int matrixSize, int *matrixColSize,
                 int *returnSize, int **returnColumnSizes);
 ```
 
-This is exactly how LeetCode passes and returns 2D arrays in C, so it is worth learning once:
+Returning a 2D array means returning several sizes as well. This is a common C convention for it, worth learning once:
 
 | Parameter | Meaning |
 |---|---|
@@ -460,7 +460,7 @@ Freeing only `tokens` leaks every string; freeing the strings after `tokens` rea
 {
   "title": "Pascal's Triangle",
   "difficulty": "Medium",
-  "topics": ["Jagged arrays", "malloc", "LeetCode conventions"],
+  "topics": ["Jagged arrays", "malloc", "Out-parameters"],
   "params": [{"name": "numRows", "type": "int"}],
   "examples": [
     {"input": ["5"], "output": "[[1],[1,1],[1,2,1],[1,3,3,1],[1,4,6,4,1]]", "explanation": "Row i has i + 1 numbers; inner numbers are the sum of the two above."},

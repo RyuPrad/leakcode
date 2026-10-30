@@ -8,7 +8,7 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 const { Msvc, parseDiagnostics, USER_FLAGS, LINK_FLAGS, RUNTIME_FLAGS } = require('./compiler');
 
-const RUNTIME_FILES = ['lc_rt.c', 'lc_mem.h', 'lc_driver.h', 'lc_ds.h'];
+const RUNTIME_FILES = ['lc_rt.c', 'lc_trace.c', 'lc_mem.h', 'lc_driver.h', 'lc_ds.h'];
 const MAX_STDOUT = 1 << 20;
 const MAX_STDERR = 64 << 10;
 const STATUS_STACK_BUFFER_OVERRUN = 0xC0000409;
@@ -52,15 +52,17 @@ function splitStdout(text) {
 }
 
 function parseRecords(text) {
-  const out = { cases: {}, fatal: null, exit: null, done: null };
+  const out = { cases: {}, fatal: null, exit: null, done: null, steps: [], truncated: false };
   for (const line of text.split('\n')) {
     if (!line.trim()) continue;
     let r;
     try { r = JSON.parse(line); } catch { continue; }
     if (r.t === 'case') out.cases[r.i] = r;
+    else if (r.t === 'step') out.steps.push(r);
     else if (r.t === 'fatal') { if (!out.fatal || out.fatal.early) out.fatal = r; }
     else if (r.t === 'exit') out.exit = r;
     else if (r.t === 'done') out.done = r;
+    else if (r.t === 'trace_truncated') out.truncated = true;
   }
   return out;
 }
@@ -85,6 +87,45 @@ function fatalFromExitCode(code, caseIndex) {
       msg: 'The program accessed memory it does not own.', frames: [] };
   }
   return null;
+}
+
+// DbgHelp lists locals in stack-layout order. Put each frame's variables in
+// the order they first appear in the function's source (parameters, then
+// declarations) and renumber the pointer targets that refer to them.
+function orderVariables(code, steps) {
+  const starts = new Map();
+  const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const fnStart = (fn) => {
+    if (!starts.has(fn)) {
+      const m = new RegExp(`\\b${escape(fn)}\\s*\\([^;{]*\\)\\s*\\{`).exec(code);
+      starts.set(fn, m ? m.index : 0);
+    }
+    return starts.get(fn);
+  };
+  const remap = (v, maps) => {
+    if (!v || typeof v !== 'object') return;
+    if (v.k === 'ptr' && v.to && v.to.f !== undefined && maps[v.to.f]) v.to.v = maps[v.to.f][v.to.v];
+    for (const x of v.items || []) remap(x, maps);
+    for (const f of v.f || []) remap(f.v, maps);
+  };
+  for (const st of steps) {
+    const maps = st.frames.map((frame) => {
+      const from = fnStart(frame.fn);
+      const keyed = frame.vars.map((v, i) => {
+        const m = new RegExp(`\\b${escape(v.n)}\\b`, 'g');
+        m.lastIndex = from;
+        const hit = m.exec(code);
+        return { v, i, pos: hit ? hit.index : Infinity };
+      });
+      keyed.sort((a, b) => a.pos - b.pos || a.i - b.i);
+      const map = [];
+      keyed.forEach((k, newIndex) => { map[k.i] = newIndex; });
+      frame.vars = keyed.map((k) => k.v);
+      return map;
+    });
+    for (const frame of st.frames) for (const v of frame.vars) remap(v.v, maps);
+    for (const h of st.heap) remap(h.v, maps);
+  }
 }
 
 class Judge {
@@ -151,9 +192,10 @@ class Judge {
     return { ok: r.code === 0 && fs.existsSync(exe), exe, dir, output, diagnostics: parseDiagnostics(r.output), ms: r.ms };
   }
 
-  // Runs a built program. mode 'judge' feeds `input` to the driver; mode
-  // 'play' pipes `stdin` to the program.
-  execute(exe, { mode, input = '', stdin = '', timeoutMs = 5000, tag = 'run' }) {
+  // Runs a built program. mode 'judge' feeds `input` to the driver; modes
+  // 'play' and 'trace' pipe `stdin` to the program. With stdoutFile, the
+  // program writes its output to that file (the tracer measures it per step).
+  execute(exe, { mode, input = '', stdin = '', timeoutMs = 5000, tag = 'run', stdoutFile = null }) {
     const dir = path.dirname(exe);
     const resultFile = path.join(dir, `${tag}-result.jsonl`);
     const inputFile = path.join(dir, `${tag}-input.txt`);
@@ -162,12 +204,15 @@ class Judge {
       const env = { ...process.env, LC_RESULT: resultFile, LC_MODE: mode, LC_INPUT: inputFile };
       delete env.ELECTRON_RUN_AS_NODE;
       const started = Date.now();
-      let child;
+      let child, outFd = null;
       try {
-        child = spawn(exe, [], { cwd: dir, env, windowsHide: true });
+        if (stdoutFile) outFd = fs.openSync(stdoutFile, 'w');
+        child = spawn(exe, [], { cwd: dir, env, windowsHide: true, stdio: ['pipe', outFd !== null ? outFd : 'pipe', 'pipe'] });
       } catch (e) {
-        resolve({ code: -1, stdout: '', stderr: e.message, records: parseRecords(''), killedFor: null, wallMs: 0 });
+        resolve({ code: -1, stdout: '', stdoutBytes: Buffer.alloc(0), stderr: e.message, records: parseRecords(''), killedFor: null, wallMs: 0 });
         return;
+      } finally {
+        if (outFd !== null) fs.closeSync(outFd);   // the child has its own handle
       }
       const out = [], err = [];
       let outLen = 0, errLen = 0, killedFor = null;
@@ -176,11 +221,16 @@ class Judge {
         try { child.kill(); } catch { /* already gone */ }
       };
       const timer = setTimeout(() => kill('timeout'), timeoutMs);
-      child.stdout.on('data', (d) => {
-        outLen += d.length;
-        if (outLen > MAX_STDOUT) kill('output');
-        else out.push(d);
-      });
+      const watch = stdoutFile ? setInterval(() => {
+        try { if (fs.statSync(stdoutFile).size > MAX_STDOUT) kill('output'); } catch { /* not created yet */ }
+      }, 250) : null;
+      if (child.stdout) {
+        child.stdout.on('data', (d) => {
+          outLen += d.length;
+          if (outLen > MAX_STDOUT) kill('output');
+          else out.push(d);
+        });
+      }
       child.stderr.on('data', (d) => {
         errLen += d.length;
         if (errLen <= MAX_STDERR) err.push(d);
@@ -189,18 +239,24 @@ class Judge {
       child.on('error', (e) => err.push(Buffer.from(String(e.message))));
       child.on('close', (code) => {
         clearTimeout(timer);
+        clearInterval(watch);
         let text = '';
         try { text = fs.readFileSync(resultFile, 'utf8'); } catch { /* no records */ }
+        let stdoutBytes = Buffer.concat(out);
+        if (stdoutFile) {
+          try { stdoutBytes = fs.readFileSync(stdoutFile).subarray(0, MAX_STDOUT); } catch { /* no output */ }
+        }
         resolve({
           code: code === null ? -1 : code >>> 0,
-          stdout: Buffer.concat(out).toString('utf8'),
+          stdout: stdoutBytes.toString('utf8'),
+          stdoutBytes,
           stderr: Buffer.concat(err).toString('utf8'),
           records: parseRecords(text),
           killedFor,
           wallMs: Date.now() - started,
         });
       });
-      child.stdin.end(mode === 'play' ? stdin : '');
+      child.stdin.end(mode === 'judge' ? '' : stdin);
     });
   }
 
@@ -372,6 +428,43 @@ class Judge {
       return {
         verdict, diagnostics, compileMs: built.ms, exitCode: run.code, wallMs: run.wallMs,
         stdout: run.stdout, stderr: run.stderr, fatal, exit: rec.exit,
+      };
+    } finally {
+      removeDir(dir);
+    }
+  }
+
+  // ------------------------------------------------------------- visualizer
+
+  // Runs a complete program line by line and returns a snapshot of its stack
+  // frames and heap blocks for every step (see runtime/lc_trace.c).
+  async trace(code, stdin) {
+    const dir = this.newBuildDir('trace');
+    try {
+      const built = await this.build(dir, { 'prelude.h': '#include "lc_mem.h"\n', 'main.c': code }, ['main.c']);
+      const diagnostics = built.diagnostics.filter((d) => d.file === 'main.c' || !/\.(c|h)$/.test(d.file));
+      if (!built.ok) return { verdict: 'compile_error', diagnostics, compileOutput: built.output, compileMs: built.ms };
+      const run = await this.execute(built.exe, {
+        mode: 'trace', stdin, timeoutMs: 20000, tag: 'trace', stdoutFile: path.join(dir, 'trace-stdout.txt'),
+      });
+      const rec = run.records;
+      // steps count output in bytes; the UI slices the decoded text
+      const charsAt = new Map();
+      for (const st of rec.steps) {
+        const n = Math.max(0, Math.min(st.out, run.stdoutBytes.length));
+        if (!charsAt.has(n)) charsAt.set(n, run.stdoutBytes.subarray(0, n).toString('utf8').length);
+        st.out = charsAt.get(n);
+      }
+      orderVariables(code, rec.steps);
+      let fatal = rec.fatal;
+      if (!fatal && !rec.exit && !run.killedFor) fatal = fatalFromExitCode(run.code, -1);
+      let verdict = 'ok';
+      if (fatal) verdict = 'runtime_error';
+      else if (run.killedFor === 'timeout') verdict = 'time_limit';
+      else if (run.killedFor === 'output') verdict = 'output_limit';
+      return {
+        verdict, diagnostics, steps: rec.steps, truncated: rec.truncated, stdout: run.stdout, stderr: run.stderr,
+        fatal, exit: rec.exit, exitCode: run.code, wallMs: run.wallMs,
       };
     } finally {
       removeDir(dir);

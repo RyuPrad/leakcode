@@ -12,17 +12,19 @@ export async function colorize(codeEl, text) {
   codeEl.innerHTML = await monaco.editor.colorize(text, 'c', { tabSize: 4 });
 }
 
-// onTryIt(code): when given, complete programs get a "Run in Playground" button.
-export function renderMarkdown(md, { onTryIt } = {}) {
+// onTryIt(code) / onVisualize(code): when given, complete programs get
+// "Visualize" and "Run in Playground" buttons.
+export function renderMarkdown(md, { onTryIt, onVisualize } = {}) {
   const el = h('div', { class: 'md' });
   el.innerHTML = marked.parse(md || '');
   for (const code of el.querySelectorAll('pre > code')) {
     const lang = (/language-(\w+)/.exec(code.className) || [])[1] || 'c';
     const text = code.textContent.replace(/\n$/, '');
     if (['c', 'h', 'cpp'].includes(lang)) colorize(code, text);
-    if (onTryIt && /\bint\s+main\s*\(/.test(text)) {
-      code.parentElement.append(
-        h('button', { class: 'btn sm play-btn', onclick: () => onTryIt(text) }, icon('play'), 'Run in Playground'));
+    if ((onTryIt || onVisualize) && /\bint\s+main\s*\(/.test(text)) {
+      code.parentElement.append(h('div', { class: 'code-actions' },
+        onVisualize ? h('button', { class: 'btn sm primary', onclick: () => onVisualize(text) }, icon('eye'), 'Visualize') : null,
+        onTryIt ? h('button', { class: 'btn sm', onclick: () => onTryIt(text) }, icon('play'), 'Run in Playground') : null));
     }
   }
   for (const a of el.querySelectorAll('a[href^="https://"]')) a.setAttribute('target', '_blank');

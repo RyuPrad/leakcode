@@ -290,7 +290,7 @@ Remove every node whose value equals `val` and return the new head.
 struct ListNode *removeElements(struct ListNode *head, int val);
 ```
 
-This is LeetCode's *Remove Linked List Elements*, with one difference that LeetCode doesn't check: **memory**. Unlinking a node from the list is not enough. Once nothing points to it, nobody else can free it. The harness frees only the nodes still in the returned list, so any node you unlinked but didn't free shows up as a leak.
+This classic exercise has a memory side that is easy to forget. Unlinking a node from the list is not enough. Once nothing points to it, nobody else can free it. The harness frees only the nodes still in the returned list, so any node you unlinked but didn't free shows up as a leak.
 @@ prelude
 struct ListNode {
     int val;

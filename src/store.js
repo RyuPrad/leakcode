@@ -45,6 +45,7 @@ class Store {
       drafts: data.drafts || {},
       settings: { ...DEFAULT_SETTINGS, ...(data.settings || {}) },
       playground: data.playground || null,
+      visualizer: data.visualizer || null,
       activity: data.activity || {},
       testcases: data.testcases || {},
       lessonsRead: data.lessonsRead || {},
@@ -137,6 +138,11 @@ class Store {
 
   savePlayground(state) {
     this.data.playground = state;
+    this.scheduleSave();
+  }
+
+  saveVisualizer(state) {
+    this.data.visualizer = state;
     this.scheduleSave();
   }
 

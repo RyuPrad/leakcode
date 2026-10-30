@@ -1,4 +1,4 @@
-// The study plan: progress overview, filters and the problem list.
+// Practice: progress overview, filters and the exercises of each chapter.
 
 import { h, icon, clear, statusIcon, diffClass, plural } from '../util.js';
 import { state, problemStatus, subscribe } from '../state.js';
@@ -128,8 +128,8 @@ export function renderProblems(root) {
     const next = nextUp();
     return h('div', { style: { display: 'flex', alignItems: 'flex-end', gap: '16px' } },
       h('div', { style: { flex: 1 } },
-        h('h1', { class: 'page-title' }, 'C & Memory Management Study Plan'),
-        h('p', { class: 'page-sub' }, `${state.problems.length} problems in ${state.sections.length} chapters, from your first pointer to writing your own malloc. Every run is checked for leaks, overflows and dangling pointers.`)),
+        h('h1', { class: 'page-title' }, 'Practice'),
+        h('p', { class: 'page-sub' }, `${state.problems.length} hands-on exercises in ${state.sections.length} chapters, from your first pointer to writing your own malloc. Every run is checked for leaks, overflows and dangling pointers.`)),
       next ? h('button', { class: 'btn primary', onclick: () => { location.hash = `#/problem/${next.id}`; } },
         icon('play'), `${state.progress[next.id] ? 'Continue' : 'Start'}: ${next.number}. ${next.title}`) : null);
   }

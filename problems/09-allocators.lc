@@ -1074,7 +1074,7 @@ void lruFree(LRUCache *c);
 
 `lruGet` and `lruPut` should both run in **O(1)**. The classic design combines a hash table (find the entry) with a doubly linked list (keep the usage order, unlink anything in O(1)).
 
-LeetCode asks for exactly this. LeakCode also checks the memory side: every evicted entry must be freed at the moment it is evicted, and `lruFree` must leave nothing behind.
+Beyond the cache logic, LeakCode checks the memory side: every evicted entry must be freed at the moment it is evicted, and `lruFree` must leave nothing behind.
 @@ prelude
 typedef struct LRUCache LRUCache;
 LRUCache *lruCreate(int capacity);

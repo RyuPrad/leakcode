@@ -3,7 +3,7 @@
 import { h, icon, clear, statusIcon, diffClass } from '../util.js';
 import { state, api, problemStatus } from '../state.js';
 import { renderMarkdown } from '../markdown.js';
-import { openInPlayground } from '../actions.js';
+import { openInPlayground, openInVisualizer } from '../actions.js';
 
 let lessonsCache = null;
 
@@ -14,9 +14,17 @@ async function lessonList() {
 
 export function renderLearn(root) {
   const page = h('div', { class: 'page' });
+  const step = (n, ic, title, text, href) => h('a', { class: 'card path-step', href },
+    h('div', { class: 'path-num' }, icon(ic)),
+    h('div', null, h('h3', null, `${n}. ${title}`), h('p', null, text)));
   const inner = h('div', { class: 'page-inner' },
-    h('h1', { class: 'page-title' }, 'Learn'),
-    h('p', { class: 'page-sub' }, 'Short lessons on how C really works with memory. Each one ends with problems to practise on, and every code sample runs in the Playground.'));
+    h('h1', { class: 'page-title' }, 'Learn C & memory management'),
+    h('p', { class: 'page-sub' }, 'Short lessons on how C really works with memory. Read one, watch its examples run in the visualizer, then practise.'),
+    h('div', { class: 'learn-path' },
+      step(1, 'book', 'Read', 'Each lesson explains one idea: the stack and the heap, pointers, strings, malloc and free, memory bugs.', '#/learn/memory-model'),
+      step(2, 'eye', 'Watch', 'The visualizer runs code one line at a time and draws every variable, heap block and pointer.', '#/visualize'),
+      step(3, 'list', 'Practise', 'Exercises with a memory check on every run: leaks and invalid accesses are pointed out line by line.', '#/practice')),
+    h('h2', { class: 'section-title' }, 'Lessons'));
   page.append(inner);
   root.append(page);
   lessonList().then((lessons) => {
@@ -57,7 +65,7 @@ export function renderLesson(root, id) {
     const next = lessons[idx + 1];
     const practice = lesson.practice.map((pid) => state.byId.get(pid)).filter(Boolean);
     main.append(h('article', { class: 'reader-article' },
-      renderMarkdown(lesson.body, { onTryIt: (code) => openInPlayground(code) }),
+      renderMarkdown(lesson.body, { onTryIt: (code) => openInPlayground(code), onVisualize: (code) => openInVisualizer(code) }),
       practice.length ? h('div', { class: 'card practice' },
         h('h3', null, 'Practice'),
         practice.map((p) => h('div', { class: 'prow', onclick: () => { location.hash = `#/problem/${p.id}`; } },

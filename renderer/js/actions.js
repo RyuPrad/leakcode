@@ -34,6 +34,19 @@ export function openInPlayground(code) {
   location.hash = '#/playground';
 }
 
+let pendingVisualizer = null;
+
+export function openInVisualizer(code, stdin = '') {
+  pendingVisualizer = { code, stdin };
+  location.hash = '#/visualize';
+}
+
+export function takePendingVisualizer() {
+  const p = pendingVisualizer;
+  pendingVisualizer = null;
+  return p;
+}
+
 export function takePendingPlaygroundCode() {
   const code = pendingPlaygroundCode;
   pendingPlaygroundCode = null;

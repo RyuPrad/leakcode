@@ -2,7 +2,7 @@
   "name": "leakcode",
   "productName": "LeakCode",
   "version": "1.0.0",
-  "description": "Practice C programming and memory management, LeetCode style.",
+  "description": "Learn C and memory management: lessons, a memory visualizer and hands-on exercises.",
   "main": "main.js",
   "private": true,
   "scripts": {
