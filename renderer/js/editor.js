@@ -103,6 +103,22 @@ function editorOptions() {
   };
 }
 
+// "Tab out": with the cursor just before a closing bracket, quote, `>` or
+// `;`, Tab jumps past it instead of inserting spaces, so you can carry on
+// after an automatically closed pair. In a line's indentation Tab indents.
+const TAB_OUT = new Set([')', ']', '}', '"', "'", '>', ';']);
+
+function tabOut(editor) {
+  const pos = editor.getPosition();
+  const line = editor.getModel().getLineContent(pos.lineNumber);
+  const next = line[pos.column - 1];
+  if (state.settings.tabOut !== false && TAB_OUT.has(next) && line.slice(0, pos.column - 1).trim()) {
+    editor.setPosition({ lineNumber: pos.lineNumber, column: pos.column + 1 });
+  } else {
+    editor.trigger('keyboard', 'tab', null);
+  }
+}
+
 // keys: { run, submit } callbacks bound to Ctrl+' and Ctrl+Enter.
 export async function createEditor(host, { value, readOnly = false, onChange, keys = {} }) {
   const monaco = await getMonaco();
@@ -134,6 +150,9 @@ export async function createEditor(host, { value, readOnly = false, onChange, ke
   if (keys.run) editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Quote, keys.run, scope);
   if (keys.submit) editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, keys.submit, scope);
   editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {}, scope);
+  // Tab keeps its usual jobs for selections, suggestions and snippet fields
+  editor.addCommand(monaco.KeyCode.Tab, () => tabOut(editor),
+    `${scope} && editorTextFocus && !editorReadonly && !suggestWidgetVisible && !inSnippetMode && !editorHasSelection && !editorHasMultipleSelections`);
   editors.add(editor);
   editor.onDidDispose(() => editors.delete(editor));
   editor.lcDecorations = editor.createDecorationsCollection([]);

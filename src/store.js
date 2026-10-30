@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS = {
   tabSize: 4,
   minimap: false,
   wordWrap: false,
+  tabOut: true,
 };
 const MAX_SUBMISSIONS_PER_PROBLEM = 30;
 
