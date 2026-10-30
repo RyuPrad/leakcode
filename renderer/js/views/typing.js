@@ -91,13 +91,14 @@ export function renderTyping(root) {
   const bar = h('div', { class: 'ty-bar' });
   const live = h('div', { class: 'ty-live' });
   const caps = h('div', { class: 'ty-caps', style: { visibility: 'hidden' } }, icon('alert'), 'Caps Lock is on');
+  const paused = h('div', { class: 'ty-paused', style: { display: 'none' } }, icon('pause'), 'Paused. Keep typing to carry on, or press Esc to start over.');
   const box = h('div', { class: 'ty-box' });
   const source = h('div', { class: 'ty-source' });
   const hint = h('div', { class: 'ty-hint' },
     h('kbd', null, 'Tab'), ' new test', h('span', { class: 'dot' }, '·'),
     h('kbd', null, 'Esc'), ' restart', h('span', { class: 'dot' }, '·'),
     h('kbd', null, 'Ctrl'), '+', h('kbd', null, 'Backspace'), ' delete a word');
-  const stage = h('div', { class: 'ty-stage' }, h('div', { class: 'ty-top' }, live, caps), box, source);
+  const stage = h('div', { class: 'ty-stage' }, h('div', { class: 'ty-top' }, live, paused, caps), box, source);
   const results = h('div', { class: 'ty-results', style: { display: 'none' } });
   const page = h('div', { class: 'ty-page' }, bar, stage, results, hint);
   root.append(page);
@@ -226,7 +227,7 @@ export function renderTyping(root) {
     test = {
       kind: cfg.mode === 'code' ? 'code' : 'words',
       key: testKey(cfg),
-      started: false, finished: false, startAt: 0,
+      started: false, finished: false, running: false, segmentStart: 0, elapsedBefore: 0,
       keys: { total: 0, correct: 0 }, samples: [], secondErrors: 0, lastTyped: 0,
     };
     if (test.kind === 'code') {
@@ -247,15 +248,34 @@ export function renderTyping(root) {
 
   function start() {
     test.started = true;
-    test.startAt = performance.now();
+    resume();
+  }
+
+  // The clock only runs while you are typing here: leaving the tab or the
+  // window pauses the test, and your next key press carries on with it.
+  function resume() {
+    test.running = true;
+    test.segmentStart = performance.now();
     page.classList.add('typing');
     caret.classList.remove('idle');
     timer = setInterval(tick, 1000);
-    if (cfg.mode === 'time') endTimer = setTimeout(finish, cfg.time * 1000);
+    if (cfg.mode === 'time') endTimer = setTimeout(finish, Math.max(0, cfg.time - test.elapsedBefore) * 1000);
+    renderLive();
   }
 
+  function pause() {
+    if (!test || !test.running) return;
+    test.elapsedBefore = elapsed();
+    test.running = false;
+    stopTimers();
+    page.classList.remove('typing');
+    caret.classList.add('idle');
+    renderLive();
+  }
+
+  // seconds spent typing, pauses not included
   function elapsed() {
-    return ((test.finished ? test.endAt : performance.now()) - test.startAt) / 1000;
+    return test.elapsedBefore + (test.running ? (performance.now() - test.segmentStart) / 1000 : 0);
   }
 
   // Characters typed (`typed`), and those that count towards the speed (`net`).
@@ -282,7 +302,7 @@ export function renderTyping(root) {
   }
 
   function tick() {
-    if (!test.started || test.finished) return;
+    if (!test.running || test.finished) return;
     const secs = elapsed();
     const c = counts();
     test.samples.push({
@@ -297,10 +317,10 @@ export function renderTyping(root) {
   }
 
   function finish() {
-    if (test.finished) return;
-    if (!test.started) return;
+    if (test.finished || !test.started) return;
+    test.elapsedBefore = elapsed();
+    test.running = false;
     test.finished = true;
-    test.endAt = performance.now();
     const partial = elapsed() - test.samples.length;
     if (partial > 0.25 || !test.samples.length) {     // the last, partial second
       const c = counts();
@@ -326,6 +346,7 @@ export function renderTyping(root) {
   function typeChar(ch) {
     if (!test || test.finished) return;
     if (!test.started) start();
+    else if (!test.running) resume();
     if (test.kind === 'code') {
       if (test.pos >= test.text.length) return;
       const ok = test.text[test.pos] === ch;
@@ -359,6 +380,7 @@ export function renderTyping(root) {
 
   function backspace(wholeWord) {
     if (!test || test.finished) return;
+    if (test.started && !test.running) resume();
     if (test.kind === 'code') {
       const back = () => {
         if (test.pos === 0) return false;
@@ -497,6 +519,7 @@ export function renderTyping(root) {
       text = `${Math.min(done, lines)}/${lines} lines`;
     }
     live.textContent = text;
+    paused.style.display = test.started && !test.running && !test.finished ? '' : 'none';
   }
 
   // ------------------------------------------------------------- results
@@ -573,6 +596,8 @@ export function renderTyping(root) {
     typeChar(e.key);
   }
   window.addEventListener('keydown', onKey);
+  const onBlur = () => pause();                 // switched to another window
+  window.addEventListener('blur', onBlur);
   const onMouse = () => page.classList.remove('typing');
   page.addEventListener('mousemove', onMouse);
   const resizeObserver = new ResizeObserver(() => { if (test && !test.finished) placeCaret(); });
@@ -594,8 +619,7 @@ export function renderTyping(root) {
 
   return {
     hide() {
-      // the clock would keep running while you are away: start the same text over
-      if (test && test.started && !test.finished) newTest(true);
+      pause();               // keep your progress; the clock waits for you
     },
     show() {
       // code sent by a "Type it" button while this page stayed open
@@ -607,6 +631,7 @@ export function renderTyping(root) {
       stopTimers();
       resizeObserver.disconnect();
       window.removeEventListener('keydown', onKey);
+      window.removeEventListener('blur', onBlur);
     },
   };
 }

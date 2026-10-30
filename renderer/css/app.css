@@ -868,6 +868,8 @@ details.prelude pre { margin-top: 8px; }
 .ty-top { display: flex; align-items: flex-end; gap: 18px; height: 38px; }
 .ty-live { font-family: var(--mono); font-size: 26px; line-height: 1; color: var(--accent); }
 .ty-caps { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--amber); }
+.ty-paused { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim); }
+.ty-paused .icon { width: 14px; height: 14px; color: var(--accent); }
 .ty-box { position: relative; margin-top: 12px; }
 .ty-words { position: relative; overflow: hidden; height: calc(3 * 1.6em); font-family: var(--mono); font-size: 26px; line-height: 1.6; }
 .ty-inner { position: relative; display: flex; flex-wrap: wrap; }
